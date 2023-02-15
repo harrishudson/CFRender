@@ -78,11 +78,11 @@ let img = CF.draw2DbasicGrid('tos',
 	                         SphericalProjection,  
 	                         'url',
 	                         {"fill": tos_fillStyle,
-                              "stroke": "none",
-                              "strokeWidth": 0,
-	                           "idealCellSize": 2,
-	                           "imageFormat": "image/gif",
-	                           "imageQuality": 0.5
+                                  "stroke": "none",
+                                  "strokeWidth": 0,
+	                          "idealCellSize": 2,
+	                          "imageFormat": "image/gif",
+	                          "imageQuality": 0.5
 	                         })
 
 ```
@@ -101,8 +101,8 @@ Where;
 	                              SphericalProjection, 
 	                              'svg',
 	                              {"fill": tos_fillStyle,
-                                   "stroke": "none",
-				                   "strokeWidth": 0,
+                                       "stroke": "none",
+                                       "strokeWidth": 0,
 	                               "eventListeners": [
 	                                 ['mouseover',show_data,null],
 	                                 ['click',show_data,null],
