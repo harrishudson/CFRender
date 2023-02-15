@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <title>CFRender POC - Example 1</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+  <script src="../CFRender.js"></script>
+ <style>
+.mapdiv {
+ border: 1px solid blue; 
+ background-color: #EEEE;
+ height: 440px; 
+ width: 580px; 
+ max-width: 90%
+}
+.anim {
+ transition: src 120ms linear;
+}
+body { 
+ font-family: Arial
+}
+ </style>
+
+ <script>
+
+// Some supporting functions to be passed to CFRender
+
+function SphericalProjection(coords) {
+ let the_point = {lng: coords[0], lat: coords[1]}
+ let the_proj = L.Projection.SphericalMercator.project(the_point)
+ return [the_proj.x, the_proj.y]
+}
+
+var tos_stats
+let cf = new CFUtils()
+
+function tos_fillStyle(cellData) {
+ return cf.linearHexColor(cellData.value, tos_stats.min, tos_stats.max, '#CC6666', '#000033')
+}
+
+
+// Main script
+
+var CF;  // CF is the main CFRender object
+var offset = 0;
+var times_offset = 0;
+var img_array = [];
+var overlay;
+var map;
+var continue_shuffle = false;
+
+function status_msg(msg) {
+ document.getElementById('status').innerText = msg
+}
+
+function process_netcdf(arrayBuf) {
+ status_msg('Begin Initial processing of NetCDF CF file')
+ CF = new CFRender(arrayBuf)
+ // Get data stats for variable 'tos'
+ tos_stats = CF.getNumDataVariableStats('tos') 
+ status_msg('End Initial processing of NetCDF CF file')
+ continue_shuffle = true
+ render_times_images(0)
+}
+
+function render_times_images(times_offset) {
+ let times = CF.netCDF.getDataVariable('time')
+ if ((times_offset == times.length) || (!continue_shuffle)) {
+  status_msg('Finished Rendering Images')
+  return;
+ }
+ status_msg(`Begin Rendering Image ${(times_offset+1)} of ${times.length}.`)
+
+ // Draw a Grid image based on 'tos' variable at a specific time dimension.
+ // Use SphericalProjection function to project data to Leaflet map ordinates.
+ // Return image as a dataURL ('url')
+ let img = CF.draw2DbasicGrid('tos', 
+	                          {"time": times[times_offset]}, 
+	                          SphericalProjection, 
+	                          'url',
+	                          {"fill": tos_fillStyle,
+				               "stroke": "none",
+				               "strokeWidth": 0,
+	                           "idealCellSize": 2
+	                          })
+
+ img_array.push({"src": img, "label": times[times_offset]})
+ status_msg(`Rendered Image ${(times_offset+1)} of ${times.length}.`)
+
+ // Draw overlay
+ if (!overlay) {
+  let bounds = CF.getXYbbox().bbox
+  let imageBounds = [[bounds[0][1], bounds[0][0]], [bounds[1][1], bounds[1][0]]]
+  overlay = L.imageOverlay(img_array[0].src, imageBounds, {"className":"anim", "opacity":0.7})
+  overlay.addTo(map);
+  status_msg(`End Adding Overlay to Map.`)
+  shuffle()
+ }
+
+ times_offset++
+ window.setTimeout(function() {render_times_images(times_offset)},0)
+}
+
+function remove_overlay() {
+ if (overlay) 
+  map.removeLayer(overlay)
+ overlay = null
+}
+
+function shuffle() {
+ let this_offset = offset % img_array.length
+ if (overlay)
+  overlay.setUrl(img_array[this_offset].src)
+ document.getElementById('time_progress').setAttribute('value', (this_offset/img_array.length*100))
+ document.getElementById('time').innerText = img_array[this_offset].label
+ shuffle_next()
+}
+
+function shuffle_next() {
+ offset++
+ if (continue_shuffle)
+  window.setTimeout(shuffle, 150)
+}
+
+async function fetchFile() {
+ status_msg('Fetching NetCDF file.')    
+ const response = await fetch('tos_O1_2001-2002.nc');
+ status_msg('Begin process input file')
+ clearFile()
+ const x = await response.arrayBuffer()
+ process_netcdf(x)
+}
+
+function clearFile() {
+ continue_shuffle = false;
+ remove_overlay()
+ offset = 0;
+ times_offset = 0;
+ img_array = [];
+}
+
+function startup() {
+ map = L.map('map').setView([0, 170], 1);
+ map.attributionControl.setPrefix(false)
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+ }).addTo(map);
+ 
+ fetchFile();
+}
+
+window.onload=startup;
+
+ </script>
+</head>
+
+<body>
+
+	<h2>CFRender POC - Example 1</h2>
+	<p>100% Client side rendering of NetCDF CF data.</p>
+	<p>Animated Grid Image Layer.  Animated over "time" dimension.</p>
+	<p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
+	<p>Status: <span id="status"></span></p>
+	<p>Time Dimension: <progress id="time_progress" min="0" max="100" value="0"></progress> 
+	   <span id="time"></span></p>
+    <p><div id="map" class="mapdiv"></div></p>
+
+</body>
+</html>

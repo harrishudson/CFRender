@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <title>CFRender POC - Example 2</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
+  <script src="../CFRender.js"></script>
+ <style>
+.mapdiv {
+ border: 1px solid blue; 
+ background-color: #EEEE;
+ height: 440px; 
+ width: 580px; 
+ max-width: 90%
+}
+body { 
+ font-family: Arial
+}
+ </style>
+
+ <script>
+
+// Some supporting functions to be passed to CFRender
+
+function SphericalProjection(coords) {
+ let the_point = {lng: coords[0], lat: coords[1]}
+ let the_proj = L.Projection.SphericalMercator.project(the_point)
+ return [the_proj.x, the_proj.y]
+}
+
+var tos_stats
+let cf = new CFUtils()
+
+function tos_fillStyle(cellData) {
+ return cf.linearHexColor(cellData.value, tos_stats.min, tos_stats.max, '#CC6666', '#000033')
+}
+
+
+// Main script
+
+var CF;  // CF is the main CFRender object;
+var map;
+
+function status_msg(msg) {
+ document.getElementById('status').innerText = msg
+}
+
+function show_data(e) {
+ let cell_data = e.srcElement.dataset
+ status_msg(`Cell Data: (${cell_data.dimension_lat.toString()},${cell_data.dimension_lon.toString()} @time=${cell_data.dimension_time.toString()}) Value=${cell_data.value.toString()}`)
+}
+
+function clear_data() {
+ status_msg(null)
+}
+
+function process_netcdf(arrayBuf) {
+ status_msg('Begin Initial processing of NetCDF CF file')
+ 
+ CF = new CFRender(arrayBuf)
+ 
+ // Get data stats for variable 'tos'
+ tos_stats = CF.getNumDataVariableStats('tos') 
+ 
+ // Get times dimension only as an SVG Image
+ let times = CF.netCDF.getDataVariable('time')
+ 
+ status_msg(`Begin Rendering Image`)
+
+ // Draw a Grid image based on 'tos' variable at a specific time dimension.
+ // Use SphericalProjection function to project data to Leaflet map ordinates.
+ // Return image as an SVG Image with eventListeners
+ let svgElem = CF.draw2DbasicGrid('tos', 
+	                              {"time": times[0]}, 
+	                              SphericalProjection, 
+	                              'svg',
+	                              {"fill": tos_fillStyle,
+				                   "stroke": "none",
+				                   "strokeWidth": 0,
+	                               "eventListeners": [
+	                                 ['mouseover',show_data,null],
+	                                 ['click',show_data,null],
+	                                 ['mouseout',clear_data,null],
+	                                ]
+	                               })
+
+  // Draw overlay
+  let bounds = CF.getXYbbox().bbox
+  let imageBounds = [[bounds[0][1], bounds[0][0]], [bounds[1][1], bounds[1][0]]]
+  let overlay = L.svgOverlay(svgElem, imageBounds, {"interactive": true})
+  overlay.addTo(map);
+ 
+  status_msg(`End Adding Overlay to Map.`)
+ }
+
+async function fetchFile() {
+ status_msg('Fetching NetCDF file.')    
+ const response = await fetch('tos_O1_2001-2002.nc');
+ status_msg('Begin process input file')
+ const x = await response.arrayBuffer()
+ process_netcdf(x)
+}
+
+function startup() {
+ map = L.map('map').setView([0, 170], 1);
+ map.attributionControl.setPrefix(false)
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+ }).addTo(map);
+ 
+ fetchFile();
+}
+
+window.onload=startup;
+
+ </script>
+</head>
+
+<body>
+
+	<h2>CFRender POC - Example 2</h2>
+	<p>100% Client side rendering of NetCDF CF data. </p>
+	<p>Interactive Grid SVG Layer. Rendering of single time slice. Hover Map to show cell data.</p>
+	<p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
+    <p>Status: <span id="status">Ready</span></p>
+	<p><div id="map" class="mapdiv"></div></p>
+
+</body>
+</html>
