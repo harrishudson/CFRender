@@ -1,8 +1,11 @@
 # CFRender - A NetCDF CF Grid Rendering Toolkit.  Proof-of-Concept
 A toolkit to enable browser based processing of NetCDF (v3.0) files in CF (Climate Forecasting) convention with a basic 2D grid renderer.  Can be used to generate imagery stand-alone or with 2D mapping tools.  Designed with no external dependencies and intended to be run in the browser.
 
+![Screenshot](https://harrishudson.com/github/CFRender_snapshot1.png)
+
+
 ## Demo
-[Examples](http://harrishudson.com/CFRender/examples/).
+[Examples](https://harrishudson.com/CFRender/examples/).
 
 ## Requirements
 No external dependencies.  Simply requires a modern browser.
@@ -74,16 +77,16 @@ Where 'longitude' and 'latitude' are X and Y dimensions ordinate variables respe
 #### Creating a Grid Image (Example 1)
 ```js
 let img = CF.draw2DbasicGrid('tos', 
-	                         {"time": '1234'}, 
-	                         SphericalProjection,  
-	                         'url',
-	                         {"fill": tos_fillStyle,
-                                  "stroke": "none",
-                                  "strokeWidth": 0,
-	                          "idealCellSize": 2,
-	                          "imageFormat": "image/gif",
-	                          "imageQuality": 0.5
-	                         })
+	                     {"time": '1234'}, 
+	                     SphericalProjection,  
+	                     'url',
+	                     {"fill": tos_fillStyle,
+                              "stroke": "none",
+                              "strokeWidth": 0,
+	                      "idealCellSize": 2,
+	                      "imageFormat": "image/gif",
+	                      "imageQuality": 0.5
+	                     })
 
 ```
 
@@ -97,18 +100,18 @@ Where;
 #### Creating a Grid Image (Example 2)
 ```js
  let svgElem = CF.draw2DbasicGrid('tos', 
-	                              {"time": '1234'}, 
-	                              SphericalProjection, 
-	                              'svg',
-	                              {"fill": tos_fillStyle,
-                                       "stroke": "none",
-                                       "strokeWidth": 0,
-	                               "eventListeners": [
-	                                 ['mouseover',show_data,null],
-	                                 ['click',show_data,null],
-	                                 ['mouseout',clear_data,null]
-	                                ]
-	                              })
+	                          {"time": '1234'}, 
+	                          SphericalProjection, 
+	                          'svg',
+	                          {"fill": tos_fillStyle,
+                                   "stroke": "none",
+                                   "strokeWidth": 0,
+	                           "eventListeners": [
+	                            ['mouseover',show_data,null],
+	                            ['click',show_data,null],
+	                            ['mouseout',clear_data,null]
+	                           ]
+	                          })
 ```	                        
 Where;
 - 'tos' is the data variable in the NetCDF
@@ -189,7 +192,6 @@ This is a simple Proof-of-Concept and is not quite production ready.  In order t
 - Add ability to limit 'NetCDFjs.getDataVariable()' by a given grid *offset* and *gridsize*.  Ie, to be able to limit returned data by a given dimension filter.  Currently, all records are returned by 'getDataVariable()' and then this is filtered based on other dimensions.  This is not really scalable for very large datasets and may crash the browser.
 - Need more complex visualisations than just a simple 2D grid.  Eg,
 complex visualisaitons that are zoom dependent. Eg, for wind and text labels, etc. Requires more work.
-
 
 
 
