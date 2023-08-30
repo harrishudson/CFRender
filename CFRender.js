@@ -1,19 +1,25 @@
 /**
  * CFRender
+ * CFUtils
  * Basic Cartesian 2D Grid Renderer for NetCDF (v3.0)
- * For NetCDF files in CF (climate forecasting) convention format
+ * For NetCDF files in CF (Climate Forecasting) convention format
  *
  * Includes (modified) embedded dependent libraries;
  * Embedded libraries have been modified by the author for usage here.
  * 1. IOBuffer
  * 2. netCDFjs (modified by Harris Hudson)
+ * Copyright as per respective authors
  *
  * So, this script has no external dependencies and is browser ready.
  * 
  * CFRender 
- * Author: (c) Harris Hudson harris@harrishudson.com 2023
+ * CFUtils
+ *
+ * Author: Copyright (c) 2023 Harris Hudson  harris@harrishudson.com 
  **/
 
+
+/* ------------------------------------------------------------------------------------------------- */
 
 // ----------------------------------
 // BEGIN Embedded dependent libraries
@@ -26,7 +32,7 @@
  *
  * Adapted from https://github.com/image-js/iobuffer
  * MIT License, Copyright (c) 2015 Michaël Zasso
- */
+ **/
  
 const defaultByteLength = 1024 * 8
 const charArray = []
@@ -1267,33 +1273,83 @@ class NetCDFReader extends NetCDFjs {
 // --------------------------------
 
 
+
+
+
+
+
+/* ------------------------------------------------------------------------------------------------- */
+
+
+
+
+
+
+
 // ---------------------------
 // Core components of CFRender
 // ---------------------------
 
 var _CFUtils = {
 
-  linearHexColor: function(value, minValue, maxValue, minHexColor, maxHexColor) {
-   value = Math.min(value, maxValue)
-   value = Math.max(value, minValue)
-   const valuePercent = (value - minValue) / (maxValue - minValue)
-   const minColorArray = this.hexToRgb(minHexColor)
-   const maxColorArray = this.hexToRgb(maxHexColor)
-   const colorArray = []
-   for (let i = 0; i < 3; i++) {
-     colorArray[i] = Math.round(minColorArray[i] + (maxColorArray[i] - minColorArray[i]) * valuePercent)
-   }
-   return this.rgbToHex(colorArray)
+ steppedHexColor: function(value, colorStops) {
+  if ((!value) && (value != 0))
+   return null
+
+  if (!colorStops)
+   return null
+
+  let orderedColorStops = colorStops.sort((a, b) => a.value - b.value)
+
+  let minKey = 0
+  let maxKey = orderedColorStops.length - 1
+
+  if (value <= orderedColorStops[minKey].value) 
+   return orderedColorStops[minKey].color;
+  if (value >= orderedColorStops[maxKey].value) 
+   return orderedColorStops[maxKey].color;
+
+  let startIndex = 0;
+  while (value > orderedColorStops[startIndex].value) {
+    startIndex++;
+  }
+
+  const startColorStop = orderedColorStops[startIndex - 1]
+  const endColorStop = orderedColorStops[startIndex]
+  const percentage = (value - startColorStop.value) / (endColorStop.value - startColorStop.value);
+
+  const startRGB = this.hexToRgb(startColorStop.color);
+  const endRGB = this.hexToRgb(endColorStop.color);
+  const interpolatedColor = this.interpolateColor(startRGB, endRGB, percentage);
+  const hexColor = this.rgbToHex(interpolatedColor);
+
+  return hexColor;
  },
 
- hexToRgbCache: {},
+ interpolateColor: function(startColor, endColor, percentage) {
+  const r = parseInt(startColor[0] + (endColor[0] - startColor[0]) * percentage);
+  const g = parseInt(startColor[1] + (endColor[1] - startColor[1]) * percentage);
+  const b = parseInt(startColor[2] + (endColor[2] - startColor[2]) * percentage);
+  return [ r, g, b ];
+ },
+
+ linearHexColor: function(value, minValue, maxValue, minHexColor, maxHexColor) {
+  if ((!value) && (value != 0))
+   return null
+  value = Math.min(value, maxValue)
+  value = Math.max(value, minValue)
+  const valuePercent = (value - minValue) / (maxValue - minValue)
+  const minColorArray = this.hexToRgb(minHexColor)
+  const maxColorArray = this.hexToRgb(maxHexColor)
+  const colorArray = []
+  for (let i = 0; i < 3; i++) {
+    colorArray[i] = Math.round(minColorArray[i] + (maxColorArray[i] - minColorArray[i]) * valuePercent)
+  }
+  return this.rgbToHex(colorArray)
+ },
 
  hexToRgb: function(hex) {
-  if (hex in this.hexToRgbCache)
-   return this.hexToRgbCache[hex]
-
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-
   const resultSplit = result ? [  
     parseInt(result[1], 16),
     parseInt(result[2], 16),
@@ -1301,7 +1357,6 @@ var _CFUtils = {
   ] : null
 
   if (resultSplit) {
-   this.hexToRgbCache[hex] = resultSplit
    return resultSplit
   }
 
@@ -1318,12 +1373,46 @@ var _CFUtils = {
  },
 
  linearOpacity: function(value, minValue, maxValue, minOpacity = 0, maxOpacity = 1) {
-   value = Math.min(value, maxValue)
-   value = Math.max(value, minValue)
-   minOpacity = Math.max(0, minOpacity)
-   maxOpacity = Math.min(1, maxOpacity)
-   const valuePercent = (value - minValue) / (maxValue - minValue)
-   return parseFloat(((maxOpacity - minOpacity) * valuePercent) + minOpacity)
+  if ((!value) && (value != 0))
+   return null
+  value = Math.min(value, maxValue)
+  value = Math.max(value, minValue)
+  minOpacity = Math.max(0, minOpacity)
+  maxOpacity = Math.min(1, maxOpacity)
+  const valuePercent = (value - minValue) / (maxValue - minValue)
+  return parseFloat(((maxOpacity - minOpacity) * valuePercent) + minOpacity)
+ },
+
+ getTimeISOString: function(value, units) {
+  try {
+   // Extract the numeric value and units from the time string
+   const [clock_units, , baseDateStr] = units.split(" ")
+   // Convert the value to a floating-point number
+   const numericValue = parseFloat(value);
+   // Convert the numeric value to milliseconds based on the units
+   let milliseconds;
+   let lower_clock_units = clock_units.toLowerCase() 
+   if ((lower_clock_units === "days") || (lower_clock_units === 'day')) {
+     milliseconds = numericValue * 24 * 60 * 60 * 1000;
+   } else if ((lower_clock_units === "seconds") || (lower_clock_units === 'second')) {
+     milliseconds = numericValue * 1000;
+   } else if ((lower_clock_units === "minutes") || (lower_clock_units === 'minute')) {
+     milliseconds = numericValue * 60 * 1000;
+   } else if ((lower_clock_units === "hours") || (lower_clock_units === "hour")) {
+     milliseconds = numericValue * 60 * 60 * 1000;
+   } else {
+    return value
+   }
+   // Base date
+   const baseDate = new Date(baseDateStr)
+   // Calculate the final date by adding milliseconds to the base date
+   const finalDate = new Date(baseDate.getTime() + milliseconds)
+   // Format the final date as a string
+   const formattedDate = finalDate.toISOString()
+   return formattedDate
+  } catch(e) {
+   return value
+  }
  }
 
 }
@@ -1331,10 +1420,10 @@ var _CFUtils = {
 function CFUtils() {return _CFUtils; }
 
 class CFRender {
-  constructor(src) {
+  constructor(src, extentCache, projectionCache) {
 
    this.netCDF = new NetCDFReader(src)
-	  
+  
    // If file is used read only then various caching will be utilised
    this.file_read_only = true
 
@@ -1365,7 +1454,21 @@ class CFRender {
    this.stats = {}
    this.XYbbox = {}
    this.XYBounds = {} 
+   if (extentCache)
+    this.extentCache = extentCache
+   else
+    this.extentCache = {}
+   if (projectionCache)
+    this.projectionCache = projectionCache
+   else
+    this.projectionCache = {}
 
+   this.debug = false
+  }
+
+  clearCache() {
+   this.projectionCache = {}
+   this.extentCache = {}
   }
 
   DimsIndexOfName(name) {
@@ -1373,15 +1476,88 @@ class CFRender {
   }
 
   searchVariablesforAxis(Axis) {
-   //TODO handle empty arrays?
+   if (!this.netCDF.headers.variables)
+    throw 'No NetCDF variable found.'
+
+   // CoordAxis - only used for final search of '_CoordinateAxisType'
+   // Translate defintive axis to loose _CoordinateAxisType definition
+   var CoordAxis;
+   switch(Axis) {
+    case 'X':
+     CoordAxis = 'Lon';
+     break;
+    case 'Y':
+     CoordAxis = 'Lat';
+     break;
+    case 'T':
+     CoordAxis = 'Time';
+     break;
+   }
+
+   // Standard_Name - only used for final search of 'standard_name'
+   // As last ditch attempt to determine axis
+   var StandardNameAxis;
+   switch(Axis) {
+    case 'X':
+     StandardNameAxis = 'longitude';
+     break;
+    case 'Y':
+     StandardNameAxis = 'latitude';
+     break;
+    case 'T':
+     StandardNameAxis = 'time';
+     break;
+   }
+
+
    for (let var_idx = 0; var_idx < this.netCDF.headers.variables.length; var_idx++) {
     let this_var = this.netCDF.headers.variables[var_idx]
+
+    // Search for 'axis' == Axis
     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
      let this_attr = this_var.attributes[attr_idx]
-     if ((this_attr.name.toLowerCase() == 'axis') && (this_attr.value == Axis) && (this_var.dimensions.length == 1))
+     if ((this_attr.name.toLowerCase() == 'axis') && 
+         (this_attr.value == Axis) && 
+         (this_var.dimensions.length == 1))
       return this_var.name
      // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
     }
+   
+    // Search for 'cartesian_axis' == Axis
+    for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
+     let this_attr = this_var.attributes[attr_idx]
+     if ((this_attr.name.toLowerCase() == 'cartesian_axis') && 
+         (this_attr.value == Axis) && 
+         (this_var.dimensions.length == 1))
+      return this_var.name
+     // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+    }
+
+    // search for loosely supported '_CoordinateAxisType'
+    // Translate defintive axis to loose _CoordinateAxisType definition
+    if (CoordAxis) {
+     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
+      let this_attr = this_var.attributes[attr_idx]
+      if ((this_attr.name == '_CoordinateAxisType') && 
+          (this_attr.value == CoordAxis) && 
+          (this_var.dimensions.length == 1))
+       return this_var.name
+      // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+     }
+    }
+  
+    // Final last ditch attemp to search for 'standard_name' 
+    if (StandardNameAxis) {
+     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
+      let this_attr = this_var.attributes[attr_idx]
+      if ((this_attr.name == 'standard_name') && 
+          (this_attr.value.toLowerCase() == StandardNameAxis) && 
+          (this_var.dimensions.length == 1))
+       return this_var.name
+      // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+     }
+    }
+
    }
 
    return undefined
@@ -1390,29 +1566,97 @@ class CFRender {
   getCleansedDataVariable(DataVariable) {
 
    let varIdx = this.varIndex[DataVariable]
-   var FillValue = null
+   var FillValue = null, ScaleFactor = null, AddOffset = null;
 
+   // Check for FillValue
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
-    if ((!FillValue) && ((this_attr.name == "_FillValue") || (this_attr.name == 'missing_value')))
+    if ((FillValue == null) && ((this_attr.name == "_FillValue") || (this_attr.name == 'missing_value')))
      FillValue = this_attr.value
    }
 
-   let varData = this.netCDF.getDataVariable(DataVariable).flat()
-   if (FillValue)
-    return varData.map(function(val) { return (val == FillValue)?null:val })
+   var varData = this.netCDF.getDataVariable(DataVariable).flat()
+
+   if (FillValue != null)
+    varData = varData.map(function(val) { return (val == FillValue) ? null : val }) 
+
+   // Check for Packed Data
+   for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
+    let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
+    if ((ScaleFactor == null) && (this_attr.name == "scale_factor") )
+     ScaleFactor = this_attr.value
+   }
+
+   if (ScaleFactor != null) 
+    varData = varData.map(function(val) { return (val != null) ? (val * ScaleFactor) : null }) 
+
+   for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
+    let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
+    if ((AddOffset == null) && (this_attr.name == "add_offset") )
+     AddOffset = this_attr.value
+   }
+
+   if (AddOffset != null) 
+    varData = varData.map(function(val) { return (val != null) ? (val + AddOffset) : null }) 
 
    return varData
   }
 
-  //TODO handle null/empty array
-  //TODO handle null parameter
+
+  getCleansedDataVariableSingleValue(DataVariable, theValue) {
+
+   if (theValue == null)
+    return null;
+
+   let varIdx = this.varIndex[DataVariable]
+   var FillValue = null, ScaleFactor = null, AddOffset = null;
+
+   // Check for FillValue
+   for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
+    let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
+    if ((FillValue == null) && 
+        ((this_attr.name == "_FillValue") || (this_attr.name == 'missing_value')))
+     FillValue = this_attr.value
+   }
+
+   if (theValue == FillValue)
+    return null
+
+   // Check for Packed Data
+   for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
+    let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
+    if ((ScaleFactor == null) && (this_attr.name == "scale_factor") )
+     ScaleFactor = this_attr.value
+   }
+
+   if (ScaleFactor != null)
+    theValue*= ScaleFactor
+  
+   for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
+    let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
+    if ((AddOffset == null) && (this_attr.name == "add_offset") )
+     AddOffset = this_attr.value
+   }
+
+   if (AddOffset != null) 
+    theValue+= AddOffset
+
+   return theValue
+  }
+
   getNumDataVariableStats(DataVariable) {
+
+   if (!DataVariable)
+    throw 'No data variable passed.'
 
    // Return stats if previously cached and file is in read only mode
    if ((this.file_read_only) && (DataVariable in this.stats)) return this.stats[DataVariable]
 
    var varDataCleansed = this.getCleansedDataVariable(DataVariable)
+
+   if (!varDataCleansed)
+    throw `No data found for variable ${DataVariable}.`
+
    var NullCount = 0
    var MinValue = null
    var MaxValue = null
@@ -1425,7 +1669,7 @@ class CFRender {
     if ((MaxValue == null) || (MaxValue < d)) MaxValue = d
     SumValue+= d
    }
-	  
+  
    //median
    let cloneArray = [...varDataCleansed].filter(function(v){ return (v != null) })
    cloneArray.sort(function(a,b) { return a - b })
@@ -1449,9 +1693,9 @@ class CFRender {
 
    let Axis = this.Axes[axis]
    if (Axis) {
-	   
+   
     //TODO check bounds dimension size must equal 2
-	   
+   
     // Try definitive method
     let var_idx = this.varIndex[Axis]
     let this_var = this.netCDF.headers.variables[var_idx]
@@ -1460,11 +1704,15 @@ class CFRender {
      let this_attr = this_var.attributes[attr_idx]
      if (this_attr.name.toLowerCase() == 'bounds') {
       let bounds_var = this_attr.value 
-      this.XYBounds[axis] = {"bounds": this.netCDF.getDataVariable(this_attr.value), "mode": "definitive"}
-      return this.XYBounds[axis]
+      var the_bounds = null;
+      try {the_bounds = this.netCDF.getDataVariable(bounds_var); } catch(e) {}
+      if (the_bounds) {
+       this.XYBounds[axis] = {"bounds": the_bounds, "mode": "definitive"}
+       return this.XYBounds[axis]
+      }
      }
     }
-	   
+   
     // Unable to automatically determine axis - so interpolate (assumes ordinates are sequential - ie, grid)
     let this_axis_data = this.netCDF.getDataVariable(Axis)
     let bounds_array=[]
@@ -1513,14 +1761,23 @@ class CFRender {
    return this.XYbbox
   }
 
-  draw2DbasicGrid(DataVariable,
-	          DimensionFilter,
-	          XYprojectionFunction,
-	          ImageType,
-	          ImageStyle) {
+  hexToRgb(hex) {
+   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+   const resultSplit = result ? [  
+     parseInt(result[1], 16),
+     parseInt(result[2], 16),
+     parseInt(result[3], 16)
+   ] : null
+   if (resultSplit) {
+    return resultSplit
+   }
+   return null
+  }
 
+  preprocessDataValidation(DataVariable,
+                           DimensionFilter) {
+  
    // Validate X/Y Axes
-
    if (!('X' in this.Axes))
     throw '"X" not found in Axes.  Please set X and Y in "Axes" manually if required.  Perhaps "Axis" = "X" missing from NetCDF attribute data.'
 
@@ -1598,84 +1855,135 @@ class CFRender {
     }
    }
 
+   return {"xDimIndex": xDimIndex,
+           "yDimIndex": yDimIndex,
+           "xDimName": xDimName,
+           "yDimName": yDimName,
+           "theVarIdx": theVarIdx,
+           "theVariable": theVariable,
+           "varDimensions": varDimensions,
+           "xVarDimOffset": xVarDimOffset,
+           "yVarDimOffset": yVarDimOffset }
+   }
+
+  getCellValue(DataVariable,
+               DimensionFilter,
+               X,
+               Y) {
+
+   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
+
+   if (isNaN(X))
+    throw 'X parameter missing or not numeric.'
+
+   if (isNaN(Y))
+    throw 'Y parameter missing or not numeric.'
+
    // Determine result array offset to use
-   let xSize = this.netCDF.getDataVariable(xDimName).length;
-   let ySize = this.netCDF.getDataVariable(yDimName).length;
+   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
+   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
    let gridSize = xSize * ySize;
    var startingOffset = gridSize;
-   for (var idx = varDimensions.length - 3; idx >= 0; idx--) {  // Assumes data is non-interlaced and X,Y are final dimensions
-    let otherDimIdx = varDimensions[idx]
+   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  
+    // Assumes data is non-interlaced and X,Y are final dimensions
+    let otherDimIdx = p.varDimensions[idx]
     let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
     let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
     startingOffset *= otherVarIndex
    }
-   if (varDimensions.length == 2)
+   if (p.varDimensions.length == 2)
     startingOffset = 0
 
-   // Fetch data
-   let the_data =  this.getCleansedDataVariable(DataVariable)
+   let the_data = this.netCDF.getDataVariable(DataVariable).flat()
    let the_result = {}
+   var result_transpose = false;
    var data_offset = startingOffset
-   var xData = this.netCDF.getDataVariable(xDimName)
-   var yData = this.netCDF.getDataVariable(yDimName)
-   if (varDimensions[varDimensions.length - 1] == yDimIndex) {
-    // Will Read X,Y
-   let xDimName = this.Axes['X']
-    for (let x_idx = 0; x_idx < xData.length; x_idx++)
-     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
-      if (!(xData[x_idx] in the_result)) 
-       the_result[xData[x_idx]] = {} 
-      if (!(yData[y_idx] in the_result[xData[x_idx]])) 
-       the_result[xData[x_idx]][yData[y_idx]] = {} 
-      the_result[xData[x_idx]][yData[y_idx]] =  {
-       "x_offset": x_idx,
-       "y_offset": y_idx,
-       "value": the_data[data_offset] 
-      } 
-      data_offset++
-     }
-   } else {
+   let xData = this.netCDF.getDataVariable(p.xDimName)
+   let yData = this.netCDF.getDataVariable(p.yDimName)
+   let xDataLength = xData.length
+   let yDataLength = yData.length
+
+   if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
+
     // Will Read Y,X
-    for (let y_idx = 0; y_idx < yData.length; y_idx++)
-     for (let x_idx = 0; x_idx < xData.length; x_idx++) {
-      if (!(xData[x_idx] in the_result)) 
-       the_result[xData[x_idx]] = {} 
-      if (!(yData[y_idx] in the_result[xData[x_idx]])) 
-       the_result[xData[x_idx]][yData[y_idx]] = {} 
-      the_result[xData[x_idx]][yData[y_idx]] =  {
-        "x_offset": x_idx,
-        "y_offset": y_idx,
-        "value": the_data[data_offset] 
-      } 
-      data_offset++
-     }
-   }
+    for (let x_idx = 0; x_idx < xDataLength; x_idx++) {
+     let x_idx_times_2 = x_idx * 2
+     let xLower = Math.min(this.XYBounds['X'].bounds[x_idx_times_2],
+                           this.XYBounds['X'].bounds[x_idx_times_2 + 1])
+     let xUpper = Math.max(this.XYBounds['X'].bounds[x_idx_times_2],
+                           this.XYBounds['X'].bounds[x_idx_times_2 + 1])
+     if ((xLower <= X) && (xUpper >= X)) {
+      // Within xBounds
+      for (let y_idx = 0; y_idx < yDataLength; y_idx++) {
+       let y_idx_times_2 = y_idx * 2
+       let yLower = Math.min(this.XYBounds['Y'].bounds[y_idx_times_2],
+                             this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
+       let yUpper = Math.max(this.XYBounds['Y'].bounds[y_idx_times_2],
+                             this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
+       if ((yLower <= Y) && (yUpper >= Y)) {
+        // Within yBounds
+        return this.getCleansedDataVariableSingleValue(DataVariable, the_data[data_offset])
+       }
+       data_offset++
+      }
+     } else
+      data_offset+= yDataLength
+    }
 
-   // Set ImageType
-   ImageType = ((ImageType) && (ImageType.toLowerCase()))
-   switch (ImageType) {
-    case 'svg': break;
-    case 'canvas': break;
-    case 'url':  break; 
-    default:  ImageType = 'image' 
-   }
+   } else {
 
+    // Will Read Y,X
+    for (let y_idx = 0; y_idx < yDataLength; y_idx++) {
+     let y_idx_times_2 = y_idx * 2
+     let yLower = Math.min(this.XYBounds['Y'].bounds[y_idx_times_2],
+                           this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
+     let yUpper = Math.max(this.XYBounds['Y'].bounds[y_idx_times_2],
+                           this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
+     if ((yLower <= Y) && (yUpper >= Y)) {
+      // Within yBounds
+      for (let x_idx = 0; x_idx < xDataLength; x_idx++) {
+       let x_idx_times_2 = x_idx * 2
+       let xLower = Math.min(this.XYBounds['X'].bounds[x_idx_times_2],
+                             this.XYBounds['X'].bounds[x_idx_times_2 + 1])
+       let xUpper = Math.max(this.XYBounds['X'].bounds[x_idx_times_2],
+                             this.XYBounds['X'].bounds[x_idx_times_2 + 1])
+       if ((xLower <= X) && (xUpper >= X)) {
+        // Within xBounds
+        return this.getCleansedDataVariableSingleValue(DataVariable, the_data[data_offset])
+       }
+       data_offset++
+      }
+     } else
+      data_offset+= xDataLength
+    }
+
+   } 
+
+   return null;
+  }
+
+  generateCaches(XYprojectionFunction) {
+  
    //Projection function
-   var projectionCache = {}
-   const projFunc = (typeof XYprojectionFunction == 'function')?
+   var localProjectionCache = {} 
+   let isFunc = typeof XYprojectionFunction == 'function'
+   const projFunc = (isFunc)?
     function(coords) { 
-     let thekey=xDimName+'_'+yDimName+'_'+coords[0].toString()+'_'+coords[1].toString()
-     if (thekey in projectionCache) {
-      return projectionCache[thekey]
+     if ((coords[0] in localProjectionCache) &&
+         (coords[1] in localProjectionCache[coords[0]])) {
+      return localProjectionCache[coords[0]][coords[1]]
      } else {
       let projectedCoords = XYprojectionFunction(coords)
-      projectionCache[thekey] = projectedCoords
-     return projectedCoords
+      if (!(coords[0] in localProjectionCache))
+       localProjectionCache[coords[0]] = {}
+      localProjectionCache[coords[0]][coords[1]] = projectedCoords
+      return projectedCoords
      }
     }:
     function(coords) { return coords; }
 
-   var xRange, yRange, minPoint, maxPoint, BoundsAspectRatio;
+   var xRange, yRange, minPoint, maxPoint
+   var extentCache = {} 
    var bounds = this.getXYbbox().bbox
    //find minXY 
    var xMin=Infinity, yMin=Infinity, xMax=-Infinity, yMax=-Infinity
@@ -1689,11 +1997,158 @@ class CFRender {
     }
    minPoint = [xMin, yMin]
    maxPoint = [xMax, yMax]
+
+   return {"extentCache": [minPoint, maxPoint], "projectionCache": localProjectionCache}
+  }
+ 
+  draw2DbasicGrid(DataVariable,
+                  DimensionFilter,
+                  XYprojectionFunction,
+                  ImageType,
+                  ImageStyle) {
+
+   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
+
+   // Determine result array offset to use
+   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
+   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
+   let gridSize = xSize * ySize;
+   var startingOffset = gridSize;
+   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  // Assumes data is non-interlaced and X,Y are final dimensions
+    let otherDimIdx = p.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    startingOffset *= otherVarIndex
+   }
+   if (p.varDimensions.length == 2)
+    startingOffset = 0
+
+   // Fetch data
+   let the_data =  this.getCleansedDataVariable(DataVariable)
+   let the_result = {}
+   var result_transpose = false;
+   var data_offset = startingOffset
+   var xData = this.netCDF.getDataVariable(p.xDimName)
+   var yData = this.netCDF.getDataVariable(p.yDimName)
+   if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
+    // Will Read X,Y
+    for (let x_idx = 0; x_idx < xData.length; x_idx++) {
+     if (!(xData[x_idx] in the_result)) 
+      the_result[xData[x_idx]] = {} 
+     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
+      if (!(yData[y_idx] in the_result[xData[x_idx]])) 
+       the_result[xData[x_idx]][yData[y_idx]] = {} 
+      the_result[xData[x_idx]][yData[y_idx]] =  {
+       "x_offset": x_idx,
+       "y_offset": y_idx,
+       "value": the_data[data_offset] 
+      } 
+      data_offset++
+     }
+    }
+   } else {
+    result_transpose = true;
+    // Will Read Y,X
+    for (let y_idx = 0; y_idx < yData.length; y_idx++) {
+     if (!(yData[y_idx] in the_result)) 
+      the_result[yData[y_idx]] = {} 
+     for (let x_idx = 0; x_idx < xData.length; x_idx++) {
+      if (!(xData[x_idx] in the_result[yData[y_idx]])) 
+       the_result[yData[y_idx]][xData[x_idx]] = {} 
+      the_result[yData[y_idx]][xData[x_idx]] =  {
+        "x_offset": x_idx,
+        "y_offset": y_idx,
+        "value": the_data[data_offset] 
+      } 
+      data_offset++
+     }
+    }
+   }
+
+   // Set ImageType
+   ImageType = ((ImageType) && (ImageType.toLowerCase()))
+   switch (ImageType) {
+    case 'svg': break;
+    case 'canvas': break;
+    case 'url':  break; 
+    default:  ImageType = 'image' 
+   }
+
+   //Projection function
+   var localProjectionCache = this.projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     if  ((coords[0] in localProjectionCache) &&
+          (coords[1] in localProjectionCache[coords[0]])) {
+      // Cache hit
+      return localProjectionCache[coords[0]][coords[1]]
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      if (!localProjectionCache)
+       localProjectionCache = {}
+      if (!(coords[0] in localProjectionCache))
+       localProjectionCache[coords[0]] = {}
+      localProjectionCache[coords[0]][coords[1]] = projectedCoords
+      return projectedCoords
+     }
+    }:
+    function(coords) { return coords; }
+
+   var xRange, yRange, minPoint, maxPoint, BoundsAspectRatio;
+   var bounds = this.getXYbbox().bbox
+   if ((this.extentCache) &&
+       (this.extentCache.length == 2) &&
+       (this.extentCache[0].length == 2) &&
+       (this.extentCache[1].length == 2)) {
+    // extentCache hit
+    if (this.debug)
+     console.log('Extent Cache hit.')
+    minPoint = this.extentCache[0]
+    maxPoint = this.extentCache[1]
+   } else {
+     //find minXY 
+     var xMin=Infinity, yMin=Infinity, xMax=-Infinity, yMax=-Infinity
+     for (let x=0; x < this.XYBounds['X'].bounds.length; x++) 
+      for (let y=0; y < this.XYBounds['Y'].bounds.length; y++) {
+       let the_point = projFunc([this.XYBounds['X'].bounds[x], this.XYBounds['Y'].bounds[y]])
+       if (the_point[0] < xMin) xMin = the_point[0]
+       if (the_point[1] < yMin) yMin = the_point[1]
+       if (the_point[0] > xMax) xMax = the_point[0]
+       if (the_point[1] > yMax) yMax = the_point[1]
+      }
+     this.projectionCache = localProjectionCache  //Update global projectionCache
+     minPoint = [xMin, yMin]
+     maxPoint = [xMax, yMax]
+     if (!this.extentCache)
+      this.extentCache = {}
+     this.extentCache = [minPoint, maxPoint]  // Update global extentCache
+    }
    xRange = maxPoint[0] - minPoint[0]
    yRange = maxPoint[1] - minPoint[1]
 
    var BoundsAspectRatio = parseFloat(yRange/xRange)
-	  
+
+   // WebGL Vertex shader source code
+   const vertexShaderSource = `
+     attribute vec2 a_position;
+     attribute vec4 a_fillColor;
+     varying vec4 v_fillColor;
+     void main() {
+       gl_Position = vec4(a_position, 0, 1);
+       v_fillColor = a_fillColor;
+     }
+   `;
+
+   // WebGL Fragment shader source code
+   const fragmentShaderSource = `
+    precision mediump float;
+    varying vec4 v_fillColor;
+    void main() {
+     vec4 color1 = vec4(v_fillColor[0], v_fillColor[1], v_fillColor[2], v_fillColor[3]);
+     gl_FragColor = color1;
+    }
+   `;
+
    if (ImageType == 'svg') {
     // Svg
     var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -1707,12 +2162,12 @@ class CFRender {
     // Canvas
     // See; https://developer.mozilla.org/en-US/docs/Web/HTML/Element/canvas#maximum_canvas_size
     const BROWSER_MAX_CANVAS_WIDTH = 16000  
-    var idealCellSize = 25; 
+    var idealCellSize = 8; 
     if (ImageStyle) {
         if ('idealCellSize' in ImageStyle) {
          if (typeof ImageStyle['idealCellSize'] === 'number')
           idealCellSize = ImageStyle['idealCellSize']
-	 }
+        }
     }
     const maxCellSize = parseInt(BROWSER_MAX_CANVAS_WIDTH / Math.max(xSize, ySize))
     const cell_pixel_size = parseInt(Math.max(1, Math.min(idealCellSize, maxCellSize)))
@@ -1722,158 +2177,295 @@ class CFRender {
     var canvasElement = document.createElement("canvas");
     canvasElement.height = pixel_height;
     canvasElement.width = pixel_width;
-    var ctx=canvasElement.getContext("2d");
-    var pixel_width_over_xRange = pixel_width/xRange
-    var pixel_height_over_yRange = pixel_height/yRange
+
+    var pixel_width_over_xRange = pixel_width / xRange
+    var pixel_height_over_yRange = pixel_height / yRange
+    var two_over_xRange = 2 / xRange
+    var two_over_yRange = 2 / yRange
+    var allGLverts = [], allGLcolors = []
+
+    var theCanvasContext = "2d"
+    if (ImageStyle) {
+     if ('canvasContext' in ImageStyle) {
+      if (typeof ImageStyle['canvasContext'] === 'string')
+       theCanvasContext = ImageStyle['canvasContext']
+     }
+    }
+
+    if (['webgl', 'experimental-webgl', '2d'].indexOf(theCanvasContext) < 0)
+     theCanvasContext = '2d'
+
+    var ctx = canvasElement.getContext(theCanvasContext, 
+                                       {antialias: true, 
+                                        desynchronized: true, 
+                                        alpha: true, 
+                                        premultipliedAlpha: false });
+
+    if ((theCanvasContext == 'webgl') || (theCanvasContext == 'experimental-webgl')) {
+     var vertexShader = ctx.createShader(ctx.VERTEX_SHADER);
+     ctx.shaderSource(vertexShader, vertexShaderSource);
+     ctx.compileShader(vertexShader);
+     // Create and compile the fragment shader
+     var fragmentShader = ctx.createShader(ctx.FRAGMENT_SHADER);
+     ctx.shaderSource(fragmentShader, fragmentShaderSource);
+     ctx.compileShader(fragmentShader);
+     // Create the shader program
+     var shaderProgram = ctx.createProgram();
+     ctx.attachShader(shaderProgram, vertexShader);
+     ctx.attachShader(shaderProgram, fragmentShader);
+     ctx.linkProgram(shaderProgram);
+     ctx.useProgram(shaderProgram);
+    }
    }
 
    //Assume getXYbbox has already been run (TODO need to check)
 
-   var cellcount = 0;
-   for (let x in the_result)
-    for (let y in the_result[x]) {
-     if (the_result[x][y].value != null) {  
- 
-      let x_offset = the_result[x][y].x_offset
-      let y_offset = the_result[x][y].y_offset
- 
-      var x1, y1, x2, y2, x3, y3, x4, y4
-      let minXminY = projFunc([this.XYBounds['X'].bounds[x_offset*2], this.XYBounds['Y'].bounds[y_offset*2]])
-      x1 = minXminY[0] - minPoint[0]; y1 = maxPoint[1] - minXminY[1]
-      let minXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset*2], this.XYBounds['Y'].bounds[y_offset*2+1]])
-      x2 = minXmaxY[0] - minPoint[0]; y2 = maxPoint[1] - minXmaxY[1]
-      let maxXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset*2+1], this.XYBounds['Y'].bounds[y_offset*2+1]])
-      x3 = maxXmaxY[0] - minPoint[0]; y3 = maxPoint[1] - maxXmaxY[1]
-      let maxXminY = projFunc([this.XYBounds['X'].bounds[x_offset*2+1], this.XYBounds['Y'].bounds[y_offset*2]])
-      x4 = maxXminY[0] - minPoint[0]; y4 = maxPoint[1] - maxXminY[1]
- 
-      // Get cellData For possible styling
-      var cellData = {}
+   var cellcount = 0
+   for (let i in the_result)
+    for (let j in the_result[i]) {
+     if (the_result[i][j].value != null) {  
+
+      // Assemble cellData
+      let cellData = {}
       cellData.dimensions = DimensionFilter;
-      cellData.dimensions[xDimName] = x
-      cellData.dimensions[yDimName] = y
-      cellData.value = the_result[x][y].value
+      cellData.value = the_result[i][j].value
+ 
+      if (!(result_transpose)) {
+       cellData.dimensions[p.xDimName] = i
+       cellData.dimensions[p.yDimName] = j
+      } else {
+       cellData.dimensions[p.xDimName] = j
+       cellData.dimensions[p.yDimName] = i
+      } 
+
+      var omit = false
+      if (ImageStyle) {
+       if ('omit' in ImageStyle) {
+        if (typeof ImageStyle['omit'] === 'function')
+         omit = ImageStyle['omit'](cellData)
+        else if ((typeof ImageStyle['omit'] === 'boolean') ||
+                 (typeof ImageStyle['omit'] === 'string') ||
+                 (typeof ImageStyle['omit'] === 'number'))
+         omit = ImageStyle['omit']
+       }
+      }
+     
+      if (omit) 
+       continue
+
+      let x_offset_times_2 = the_result[i][j].x_offset * 2
+      let y_offset_times_2 = the_result[i][j].y_offset * 2
+      let x_offset_times_2_plus_1 = x_offset_times_2 + 1
+      let y_offset_times_2_plus_1 = y_offset_times_2 + 1
+      let minXminY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2], this.XYBounds['Y'].bounds[y_offset_times_2]])
+      let x1 = minXminY[0] - minPoint[0]
+      let y1 = maxPoint[1] - minXminY[1]
+      let minXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2], this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
+      let x2 = minXmaxY[0] - minPoint[0]
+      let y2 = maxPoint[1] - minXmaxY[1]
+      let maxXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2_plus_1], this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
+      let x3 = maxXmaxY[0] - minPoint[0]
+      let y3 = maxPoint[1] - maxXmaxY[1]
+      let maxXminY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2_plus_1], this.XYBounds['Y'].bounds[y_offset_times_2]])
+      let x4 = maxXminY[0] - minPoint[0]
+      let y4 = maxPoint[1] - maxXminY[1]
  
       if (ImageType == 'svg') {
-       let cell = document.createElementNS("http://www.w3.org/2000/svg","path")
-       //var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'L'+x1+','+y1+'z'
-       var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'z'
-       cell.setAttribute("d",path)
- 	     
+       var cellEvents = []
+      
        //Styling
-       var stroke="none", strokeWidth=1, fill="black", opacity=1
+       var stroke = "none", strokeWidth = 1, fill = "#000000", opacity = 1
        if (ImageStyle) {
         if ('stroke' in ImageStyle) {
          if (typeof ImageStyle['stroke'] === 'function')
           stroke = ImageStyle['stroke'](cellData)
-         if (typeof ImageStyle['stroke'] === 'string')
+         else if (typeof ImageStyle['stroke'] === 'string')
           stroke = ImageStyle['stroke']
         }
         if ('strokeWidth' in ImageStyle) {
          if (typeof ImageStyle['strokeWidth'] === 'function')
           strokeWidth = ImageStyle['strokeWidth'](cellData)
-         if (typeof ImageStyle['strokeWidth'] === 'number')
+         else if (typeof ImageStyle['strokeWidth'] === 'number')
           strokeWidth = ImageStyle['strokeWidth']
         }
         if ('fill' in ImageStyle) {
          if (typeof ImageStyle['fill'] === 'function')
           fill = ImageStyle['fill'](cellData)
-         if (typeof ImageStyle['fill'] === 'string')
+         else if (typeof ImageStyle['fill'] === 'string')
           fill = ImageStyle['fill']
         }
         if ('opacity' in ImageStyle) {
          if (typeof ImageStyle['opacity'] === 'function')
           opacity = ImageStyle['opacity'](cellData)
-         if (typeof ImageStyle['opacity'] === 'string')
+         else if (typeof ImageStyle['opacity'] === 'number')
           opacity = ImageStyle['opacity']
         }
         if ('eventListeners' in ImageStyle) {
           try {
           for (let ev = 0; ev < ImageStyle['eventListeners'].length; ev++) {
- 	       let this_event = ImageStyle['eventListeners'][ev]
- 	        if ((typeof this_event[0] === 'string') && (typeof this_event[1] === 'function')) 
-             cell.addEventListener(this_event[0],this_event[1],this_event[2])
- 	 }
- 	     } catch(e) { console.log(e); }
+           let this_event = ImageStyle['eventListeners'][ev]
+           if ((typeof this_event[0] === 'string') && (typeof this_event[1] === 'function')) 
+            cellEvents.push(this_event)
+          }
+             } catch(e) { if (this.debug) console.log(e); }
         }
        }
- 
+
+       let cell = document.createElementNS("http://www.w3.org/2000/svg", "path")
+       //var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'L'+x1+','+y1+'z'
+       //var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'z'
+       let path = `M${x1},${y1}L${x2},${y2}L${x3},${y3}L${x4},${y4}z`
+       cell.setAttribute("d", path)
+
+       // Styling
        cell.setAttribute("fill", fill)
        cell.setAttribute("stroke", stroke)
        cell.setAttribute("stroke-width", strokeWidth.toString()+'px')
        cell.setAttribute("opacity", opacity.toString())
        cell.setAttribute("vector-effect", "non-scaling-stroke")
- 	     
+      
        //Set cell data value and dimensions 
-       cell.setAttribute('data-value', the_result[x][y].value)
+       cell.setAttribute('data-value', the_result[i][j].value)
        for (let dim in cellData.dimensions) {
         if ((cellData.dimensions[dim]) && (typeof cellData.dimensions[dim] != 'function'))
          cell.setAttribute('data-dimension_'+dim.replace(/\s/g, ''), cellData.dimensions[dim])
        }
+
+       // Add events
+       for (let ev = 0; ev < cellEvents.length; ev++)
+         cell.addEventListener(cellEvents[ev][0],cellEvents[ev][1],cellEvents[ev][2])
  
        svgElement.appendChild(cell) 
-     } else {
+
+      } else {
        // Canvas
  
-       let x1pixel = parseInt(x1 * pixel_width_over_xRange)
-       let x2pixel = parseInt(x2 * pixel_width_over_xRange)
-       let x3pixel = parseInt(x3 * pixel_width_over_xRange)
-       let x4pixel = parseInt(x4 * pixel_width_over_xRange)
-       let y1pixel = parseInt(y1 * pixel_height_over_yRange)
-       let y2pixel = parseInt(y2 * pixel_height_over_yRange)
-       let y3pixel = parseInt(y3 * pixel_height_over_yRange)
-       let y4pixel = parseInt(y4 * pixel_height_over_yRange)
- 
-       //Styling
-       var stroke="none", strokeWidth="1", fill="black", opacity=null
-       if (ImageStyle) {
-        if ('stroke' in ImageStyle) {
-         if (typeof ImageStyle['stroke'] === 'function')
-          stroke = ImageStyle['stroke'](cellData)
-         if (typeof ImageStyle['stroke'] === 'string')
-          stroke = ImageStyle['stroke']
+       if (theCanvasContext == "2d") {
+
+        //Styling
+        var stroke = "none", strokeWidth = 1, fill = "#000000", opacity = 1
+        if (ImageStyle) {
+         if ('stroke' in ImageStyle) {
+          if (typeof ImageStyle['stroke'] === 'function')
+           stroke = ImageStyle['stroke'](cellData)
+          else if (typeof ImageStyle['stroke'] === 'string')
+           stroke = ImageStyle['stroke']
+         }
+         if ('strokeWidth' in ImageStyle) {
+          if (typeof ImageStyle['strokeWidth'] === 'function')
+           strokeWidth = ImageStyle['strokeWidth'](cellData)
+          else if (typeof ImageStyle['strokeWidth'] === 'number')
+           strokeWidth = ImageStyle['strokeWidth']
+         }
+         if ('fill' in ImageStyle) {
+          if (typeof ImageStyle['fill'] === 'function')
+           fill = ImageStyle['fill'](cellData)
+         else if (typeof ImageStyle['fill'] === 'string')
+           fill = ImageStyle['fill']
+         }
+         if ('opacity' in ImageStyle) {
+          if (typeof ImageStyle['opacity'] === 'function')
+           opacity = ImageStyle['opacity'](cellData)
+          else if (typeof ImageStyle['opacity'] === 'number')
+           opacity = ImageStyle['opacity']
+         }
         }
-        if ('strokeWidth' in ImageStyle) {
-         if (typeof ImageStyle['strokeWidth'] === 'function')
-          strokeWidth = ImageStyle['strokeWidth'](cellData)
-         if (typeof ImageStyle['strokeWidth'] === 'number')
-          strokeWidth = ImageStyle['strokeWidth']
+  
+        let x1pixel = x1 * pixel_width_over_xRange
+        let x2pixel = x2 * pixel_width_over_xRange
+        let x3pixel = x3 * pixel_width_over_xRange
+        let x4pixel = x4 * pixel_width_over_xRange
+        let y1pixel = y1 * pixel_height_over_yRange
+        let y2pixel = y2 * pixel_height_over_yRange
+        let y3pixel = y3 * pixel_height_over_yRange
+        let y4pixel = y4 * pixel_height_over_yRange
+
+        if (opacity != null)
+         ctx.globalAlpha = opacity
+        ctx.beginPath();
+        ctx.fillStyle = fill
+        ctx.strokeStyle = stroke
+        ctx.moveTo(x1pixel, y1pixel);
+        ctx.lineTo(x2pixel, y2pixel)
+        ctx.lineTo(x3pixel, y3pixel)
+        ctx.lineTo(x4pixel, y4pixel)
+        if (fill != 'none')
+         ctx.fill()
+        if (stroke != 'none')
+         ctx.stroke()
+
+       } else {
+        // Webgl
+
+        //Styling
+        var fill = "#000000", opacity = 1 
+        if (ImageStyle) {
+         if ('fill' in ImageStyle) {
+          if (typeof ImageStyle['fill'] === 'function')
+           fill = ImageStyle['fill'](cellData)
+          else if (typeof ImageStyle['fill'] === 'string')
+           fill = ImageStyle['fill']
+         }
+         if ('opacity' in ImageStyle) {
+          if (typeof ImageStyle['opacity'] === 'function')
+           opacity = ImageStyle['opacity'](cellData)
+          else if (typeof ImageStyle['opacity'] === 'number')
+           opacity = ImageStyle['opacity']
+         }
         }
-        if ('fill' in ImageStyle) {
-         if (typeof ImageStyle['fill'] === 'function')
-          fill = ImageStyle['fill'](cellData)
-         if (typeof ImageStyle['fill'] === 'string')
-          fill = ImageStyle['fill']
-        }
-        if ('opacity' in ImageStyle) {
-         if (typeof ImageStyle['opacity'] === 'function')
-          opacity = ImageStyle['opacity'](cellData)
-         if (typeof ImageStyle['opacity'] === 'string')
-          opacity = ImageStyle['opacity']
-        }
-       }
- 
-       if (opacity != null)
-        ctx.globalAlpha = opacity
-       ctx.beginPath();
-       ctx.fillStyle = fill
-       ctx.strokeStyle = stroke
-       ctx.moveTo(x1pixel, y1pixel);
-       ctx.lineTo(x2pixel, y2pixel)
-       ctx.lineTo(x3pixel, y3pixel)
-       ctx.lineTo(x4pixel, y4pixel)
-       if (fill != 'none')
-        ctx.fill()
-       if (stroke != 'none')
-        ctx.stroke()
- 		
-    }
+
+        let x1pixel = (x1 * two_over_xRange) - 1
+        let x2pixel = (x2 * two_over_xRange) - 1
+        let x3pixel = (x3 * two_over_xRange) - 1
+        let x4pixel = (x4 * two_over_xRange) - 1
+        let y1pixel = 1 - (y1 * two_over_yRange)
+        let y2pixel = 1 - (y2 * two_over_yRange)
+        let y3pixel = 1 - (y3 * two_over_yRange)
+        let y4pixel = 1 - (y4 * two_over_yRange)
+
+        allGLverts.push(x1pixel, y1pixel, x2pixel, y2pixel, x3pixel, y3pixel,  //Triangle 1
+                        x3pixel, y3pixel, x4pixel, y4pixel, x1pixel, y1pixel )  //Triangle 2
+
+
+        let fillPrimitive = this.hexToRgb(fill).map(function(color){ return color/255}) 
+
+        allGLcolors.push(fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
+                         fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
+                         fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
+                         fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
+                         fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
+                         fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity)
+
+      }
+     }
  
     cellcount++
     }
    }
 
-   //console.log(`cellcount; ${cellcount}`)
+   // Send WebGL arrays to the GPU if using WebGL
+   if ((theCanvasContext == "webgl") || (theCanvasContext == 'experimental-webgl')) {
+    var vertLoc = ctx.getAttribLocation(shaderProgram, "a_position");
+    const vertexBuffer = ctx.createBuffer();
+    var vertArray = new Float32Array(allGLverts);
+    var fsize = vertArray.BYTES_PER_ELEMENT;
+    ctx.bindBuffer(ctx.ARRAY_BUFFER, vertexBuffer);
+    ctx.bufferData(ctx.ARRAY_BUFFER, vertArray, ctx.STATIC_DRAW);
+    ctx.enableVertexAttribArray(vertLoc);
+    ctx.vertexAttribPointer(vertLoc, 2, ctx.FLOAT, false, 0, 0);
+    var theBufferColors = new Float32Array(allGLcolors)
+    var theBufferColorsSize = theBufferColors.BYTES_PER_ELEMENT;
+    const instanceBuffer = ctx.createBuffer();
+    ctx.bindBuffer(ctx.ARRAY_BUFFER, instanceBuffer);
+    ctx.bufferData(ctx.ARRAY_BUFFER, theBufferColors, ctx.STATIC_DRAW);
+    const colorLoc = ctx.getAttribLocation(shaderProgram, 'a_fillColor');
+    ctx.vertexAttribPointer(colorLoc, 4, ctx.FLOAT, false, 0, 0) 
+    ctx.enableVertexAttribArray(colorLoc);
+    ctx.drawArrays(ctx.TRIANGLES, 0, vertArray.length);
+   }
+
+   if (this.debug)
+    console.log(`Cells Rendered; ${cellcount}`)
 
    var imgFormat = null, imgQuality = null
    if (ImageStyle) {
@@ -1893,12 +2485,12 @@ class CFRender {
     case 'url': return canvasElement.toDataURL(imgFormat, imgQuality); break
     default: {
      var img = new Image()
-     img.setAttribute('width','100%')
-     img.setAttribute('height','100%')
+     img.setAttribute('width', '100%')
+     img.setAttribute('height', '100%')
      img.src = canvasElement.toDataURL(imgFormat, imgQuality)
      return img
     }
    }
- 
   }
 }
+

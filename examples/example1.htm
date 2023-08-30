@@ -44,12 +44,14 @@ function tos_fillStyle(cellData) {
 // Main script
 
 var CF;  // CF is the main CFRender object
+var CFU = new CFUtils();
 var offset = 0;
 var times_offset = 0;
 var img_array = [];
 var overlay;
 var map;
 var continue_shuffle = false;
+var time_units
 
 function status_msg(msg) {
  document.getElementById('status').innerText = msg
@@ -58,11 +60,29 @@ function status_msg(msg) {
 function process_netcdf(arrayBuf) {
  status_msg('Begin Initial processing of NetCDF CF file')
  CF = new CFRender(arrayBuf)
+ console.log(CF)
+ set_time_units(CF)
+ console.log(time_units);
+ 
  // Get data stats for variable 'tos'
- tos_stats = CF.getNumDataVariableStats('tos') 
+ tos_stats = CF.getNumDataVariableStats('tos')
  status_msg('End Initial processing of NetCDF CF file')
  continue_shuffle = true
  render_times_images(0)
+}
+
+function set_time_units(CF) {
+  let vars = CF.netCDF.headers.variables;
+  // Hard coding dimension as 'time' for now
+  for (let v = 0; v < vars.length; v++) {
+      if (vars[v].name == 'time') {
+          let time_attribs = vars[v].attributes
+         for (let a = 0; a < time_attribs.length; a++) {
+          if (time_attribs[a].name == 'units')
+          time_units = time_attribs[a].value
+         }  
+      }
+  }
 }
 
 function render_times_images(times_offset) {
@@ -77,16 +97,17 @@ function render_times_images(times_offset) {
  // Use SphericalProjection function to project data to Leaflet map ordinates.
  // Return image as a dataURL ('url')
  let img = CF.draw2DbasicGrid('tos', 
-	                          {"time": times[times_offset]}, 
-	                          SphericalProjection, 
-	                          'url',
-	                          {"fill": tos_fillStyle,
-				               "stroke": "none",
-				               "strokeWidth": 0,
-	                           "idealCellSize": 2
-	                          })
+                              {"time": times[times_offset]}, 
+                              SphericalProjection, 
+                              'url',
+                              {"fill": tos_fillStyle,
+                               "stroke": "none",
+                               "strokeWidth": 0,
+                               "idealCellSize": 15,
+                               "canvasContext": "2d"
+                              })
 
- img_array.push({"src": img, "label": times[times_offset]})
+ img_array.push({"src": img, "label": CFU.getTimeLiteral(times[times_offset], time_units)})
  status_msg(`Rendered Image ${(times_offset+1)} of ${times.length}.`)
 
  // Draw overlay
@@ -151,21 +172,19 @@ function startup() {
  fetchFile();
 }
 
-window.onload=startup;
+window.onload = startup;
 
  </script>
 </head>
 
 <body>
-
-	<h2>CFRender POC - Example 1</h2>
-	<p>100% Client side rendering of NetCDF CF data.</p>
-	<p>Animated Grid Image Layer.  Animated over "time" dimension.</p>
-	<p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
-	<p>Status: <span id="status"></span></p>
-	<p>Time Dimension: <progress id="time_progress" min="0" max="100" value="0"></progress> 
-	   <span id="time"></span></p>
-    <p><div id="map" class="mapdiv"></div></p>
-
+ <h2>CFRender POC - Example 1</h2>
+ <p>100% Client side rendering of NetCDF CF data.</p>
+ <p>Animated Grid Image Layer.  Animated over "time" dimension.</p>
+ <p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
+ <p>Status: <span id="status"></span></p>
+ <p>Time Dimension: <progress id="time_progress" min="0" max="100" value="0"></progress> 
+ <span id="time"></span></p>
+ <p><div id="map" class="mapdiv"></div></p>
 </body>
 </html>

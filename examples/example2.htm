@@ -73,18 +73,18 @@ function process_netcdf(arrayBuf) {
  // Use SphericalProjection function to project data to Leaflet map ordinates.
  // Return image as an SVG Image with eventListeners
  let svgElem = CF.draw2DbasicGrid('tos', 
-	                              {"time": times[0]}, 
-	                              SphericalProjection, 
-	                              'svg',
-	                              {"fill": tos_fillStyle,
-				                   "stroke": "none",
-				                   "strokeWidth": 0,
-	                               "eventListeners": [
-	                                 ['mouseover',show_data,null],
-	                                 ['click',show_data,null],
-	                                 ['mouseout',clear_data,null],
-	                                ]
-	                               })
+                                  {"time": times[0]}, 
+                                  SphericalProjection, 
+                                  'svg',
+                                  {"fill": tos_fillStyle,
+                                   "stroke": "none",
+                                   "strokeWidth": 0,
+                                   "eventListeners": [
+                                    ['mouseover',show_data,null],
+                                    ['click',show_data,null],
+                                    ['mouseout',clear_data,null],
+                                   ]
+                                  })
 
   // Draw overlay
   let bounds = CF.getXYbbox().bbox
@@ -113,19 +113,17 @@ function startup() {
  fetchFile();
 }
 
-window.onload=startup;
+window.onload = startup;
 
  </script>
 </head>
 
 <body>
-
-	<h2>CFRender POC - Example 2</h2>
-	<p>100% Client side rendering of NetCDF CF data. </p>
-	<p>Interactive Grid SVG Layer. Rendering of single time slice. Hover Map to show cell data.</p>
-	<p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
-    <p>Status: <span id="status">Ready</span></p>
-	<p><div id="map" class="mapdiv"></div></p>
-
+ <h2>CFRender POC - Example 2</h2>
+ <p>100% Client side rendering of NetCDF CF data. </p>
+ <p>Interactive Grid SVG Layer. Rendering of single time slice. Hover Map to show cell data.</p>
+ <p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
+ <p>Status: <span id="status">Ready</span></p>
+ <p><div id="map" class="mapdiv"></div></p>
 </body>
 </html>
