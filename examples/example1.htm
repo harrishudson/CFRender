@@ -107,7 +107,7 @@ function render_times_images(times_offset) {
                                "canvasContext": "2d"
                               })
 
- img_array.push({"src": img, "label": CFU.getTimeLiteral(times[times_offset], time_units)})
+ img_array.push({"src": img, "label": CFU.getTimeISOString(times[times_offset], time_units)})
  status_msg(`Rendered Image ${(times_offset+1)} of ${times.length}.`)
 
  // Draw overlay
