@@ -1,7 +1,7 @@
 /**
  * CFRender
  * CFUtils
- * Basic Cartesian 2D Grid Renderer for NetCDF (v3.0)
+ * Basic 2D Grid Renderer for NetCDF (v3.0)
  * For NetCDF files in CF (Climate Forecasting) convention format
  *
  * Includes (modified) embedded dependent libraries;
@@ -15,7 +15,12 @@
  * CFRender 
  * CFUtils
  *
- * Author: Copyright (c) 2023 Harris Hudson  harris@harrishudson.com 
+ * Author: Copyright (c) 2024 Harris Hudson  harris@harrishudson.com 
+ *
+ * Future work;
+ *
+ * - Wind direction Arrows Renderer (consideration in progress)
+ *
  **/
 
 
@@ -34,13 +39,13 @@
  * MIT License, Copyright (c) 2015 Michaël Zasso
  **/
  
-const defaultByteLength = 1024 * 8
-const charArray = []
+export const defaultByteLength = 1024 * 8
+export const charArray = []
  
 /**
  * Class for writing and reading binary data
  */
-class IOBuffer {
+export class IOBuffer {
   /**
    * @param {undefined|number|ArrayBuffer|TypedArray|IOBuffer|Buffer} data - The data to construct the IOBuffer with.
    *
@@ -575,7 +580,7 @@ class IOBuffer {
  *  Significant modifications by Harris Hudson (2023) to make it self contained and web browser ready
  **/
 
-class NetCDFjs {
+export class NetCDFjs {
 
   constructor() {
 
@@ -1109,7 +1114,7 @@ class NetCDFjs {
  * @param {ArrayBuffer} data - ArrayBuffer or any Typed Array (including Node.js' Buffer from v4) with the data
  * @constructor
  */
-class NetCDFReader extends NetCDFjs {
+export class NetCDFReader extends NetCDFjs {
   constructor(data) {
     super()
 
@@ -1372,6 +1377,41 @@ var _CFUtils = {
   return "#" + this.componentToHex(rgb[0]) + this.componentToHex(rgb[1]) + this.componentToHex(rgb[2])
  },
 
+ steppedOpacity: function(value, opacityStops) {
+  if ((!value) && (value != 0))
+    return null;
+
+  if (!opacityStops)
+    return null;
+
+  // Ensure the color stops are ordered
+  let orderedColorStops = opacityStops.sort((a, b) => a.value - b.value);
+
+  let minKey = 0;
+  let maxKey = orderedColorStops.length - 1;
+
+  // Return the min or max opacity if the value is out of range
+  if (value <= orderedColorStops[minKey].value)
+    return orderedColorStops[minKey].opacity;
+  if (value >= orderedColorStops[maxKey].value)
+    return orderedColorStops[maxKey].opacity;
+
+  // Find the correct color stop range for interpolation
+  let startIndex = 0;
+  while (value > orderedColorStops[startIndex].value) {
+    startIndex++;
+  }
+
+  const startOpacityStop = orderedColorStops[startIndex - 1];
+  const endOpacityStop = orderedColorStops[startIndex];
+  const percentage = (value - startOpacityStop.value) / (endOpacityStop.value - startOpacityStop.value);
+
+  // Interpolate the opacity
+  const interpolatedOpacity = startOpacityStop.opacity + (endOpacityStop.opacity - startOpacityStop.opacity) * percentage;
+
+  return interpolatedOpacity;
+ },
+
  linearOpacity: function(value, minValue, maxValue, minOpacity = 0, maxOpacity = 1) {
   if ((!value) && (value != 0))
    return null
@@ -1394,12 +1434,14 @@ var _CFUtils = {
    let lower_clock_units = clock_units.toLowerCase() 
    if ((lower_clock_units === "days") || (lower_clock_units === 'day')) {
      milliseconds = numericValue * 24 * 60 * 60 * 1000;
+   } else if ((lower_clock_units === "msecs") || (lower_clock_units === 'msec')) {
+     milliseconds = numericValue
    } else if ((lower_clock_units === "seconds") || (lower_clock_units === 'second')) {
-     milliseconds = numericValue * 1000;
+     milliseconds = numericValue * 1000
    } else if ((lower_clock_units === "minutes") || (lower_clock_units === 'minute')) {
-     milliseconds = numericValue * 60 * 1000;
+     milliseconds = numericValue * 60 * 1000
    } else if ((lower_clock_units === "hours") || (lower_clock_units === "hour")) {
-     milliseconds = numericValue * 60 * 60 * 1000;
+     milliseconds = numericValue * 60 * 60 * 1000
    } else {
     return value
    }
@@ -1413,47 +1455,80 @@ var _CFUtils = {
   } catch(e) {
    return value
   }
- }
+ },
 
+ zuluToLocalTime: function(zuluString) {
+  const options = {
+   year: 'numeric',
+   month: 'long',
+   day: 'numeric',
+   hour: '2-digit',
+   minute: '2-digit',
+   second: '2-digit',
+   timeZoneName: 'short'
+  }
+  let d = new Date(zuluString).toLocaleString(undefined, options)
+  return d
+ }
 }
 
-function CFUtils() {return _CFUtils; }
+export function CFUtils() {return _CFUtils; }
 
-class CFRender {
-  constructor(src, extentCache, projectionCache) {
-
-   this.netCDF = new NetCDFReader(src)
-  
-   // If file is used read only then various caching will be utilised
-   this.file_read_only = true
-
-   this.dimensionFilter = {}
-
-   this.dimIndex = {}
-   for (let idx = 0; idx < this.netCDF.headers.dimensions.length; idx++)
-    this.dimIndex[this.netCDF.headers.dimensions[idx].name] = idx
-
-   this.varIndex = {}
-   for (let idx = 0; idx < this.netCDF.headers.variables.length; idx++)
-    this.varIndex[this.netCDF.headers.variables[idx].name] = idx
-
-   this.Axes = {}
-   try {
-    this.Axes['X'] = this.searchVariablesforAxis('X')
-   } catch(e) { console.error(e); console.error('Cannot determine X axis'); }
-
-   try {
-    this.Axes['Y'] = this.searchVariablesforAxis('Y')
-   } catch(e) { console.error(e); console.error('Cannot determine Y axis'); }
-
-   try {
-    this.Axes['T'] = this.searchVariablesforAxis('T')
-   } catch(e) { console.info(e); console.info('Cannot determine T axis - info only'); }
-
-   // when file_read_only is true, these will be used as caching objects
-   this.stats = {}
-   this.XYbbox = {}
-   this.XYBounds = {} 
+export class CFRender {
+  constructor(src, extentCache, projectionCache, longitudeWrap) {
+   if (src) {
+    this.netCDF = new NetCDFReader(src)
+    // If file is used read only then various caching will be utilised
+    this.file_read_only = true
+    this.dimensionFilter = {}
+    this.dimIndex = {}
+    for (let idx = 0; idx < this.netCDF.headers.dimensions.length; idx++)
+     this.dimIndex[this.netCDF.headers.dimensions[idx].name] = idx
+    this.varIndex = {}
+    for (let idx = 0; idx < this.netCDF.headers.variables.length; idx++)
+     this.varIndex[this.netCDF.headers.variables[idx].name] = idx
+    this.Axes = {}
+    this.varOrdinate = {}
+    try {
+     let axis = this.searchVariablesforAxis('X')
+     if (axis) {
+      this.Axes['X'] = axis.axis;
+      if (axis.ordinate)
+       this.varOrdinate['X'] = axis.ordinate;
+     }
+    } catch(e) { 
+     console.error(e); 
+     console.error('Cannot determine X axis')
+    }
+    try {
+     let axis = this.searchVariablesforAxis('Y')
+     if (axis) {
+      this.Axes['Y'] = axis.axis;
+      if (axis.ordinate)
+       this.varOrdinate['Y'] = axis.ordinate;
+     }
+    } catch(e) { 
+     console.error(e)
+     console.error('Cannot determine Y axis')
+    }
+    try {
+     this.Axes['T'] = this.searchVariablesforAxis('T')
+    } catch(e) { 
+     console.info(e)
+     console.info('Cannot determine T axis - info only')
+    }
+    // when file_read_only is true, these will be used as caching objects
+    this.stats = {}
+    this.XYbbox = {}
+    this.XYBounds = {} 
+    this.data2DGrid = []
+    this.data2DArrows = [] //Wind Arrows visualisations for future work
+    // If X/Y variables are provided as separate vars to dimension grid variables, 
+    // then assume the dataset is already projected in some other projection 
+    // (not unprojected lat/longs), and lat/longs are provided separately for CF conformance.
+    // This has a significant impact on the way this netCDF file will be handled here.
+    this.is_projected_source = (('X' in this.varOrdinate) || ('Y' in this.varOrdinate))
+   }
    if (extentCache)
     this.extentCache = extentCache
    else
@@ -1461,13 +1536,21 @@ class CFRender {
    if (projectionCache)
     this.projectionCache = projectionCache
    else
-    this.projectionCache = {}
+    this.projectionCache = new Map()
+   this.longitudeWrap = false
+   if (longitudeWrap)
+    this.longitudeWrap = true
+   this.defaultIdealCellSize = 4 
+   this.debug = false 
+  }
 
-   this.debug = false
+  Log(msg) {
+   if (this.debug)
+    console.log(msg)
   }
 
   clearCache() {
-   this.projectionCache = {}
+   this.projectionCache = new Map() 
    this.extentCache = {}
   }
 
@@ -1475,13 +1558,40 @@ class CFRender {
    return this.dimIndex[name]
   }
 
-  searchVariablesforAxis(Axis) {
+  getdata2DGrid() {
+   return this.data2DGrid
+  }
+
+  getTransferableData2DGrid() {
+   let grid = this.data2DGrid
+   grid['XYprojectionFunction'] = null
+   return grid
+  }
+
+  setdata2DGrid(grid) {
+   this.data2DGrid = grid
+  }
+
+  getIsProjectedSource() {
+   return this.is_projected_source
+  }
+
+  setIsProjectedSource(b) {
+   this.is_projected_source = b
+  }
+
+  getProjectionCache() {
+   return this.projectionCache
+  }
+
+  searchVariablesforAxis(Axis, DimLength) {
+   var theAxis = null, theVarOrdinate = null
+   DimLength = (DimLength)?DimLength:1
    if (!this.netCDF.headers.variables)
     throw 'No NetCDF variable found.'
-
    // CoordAxis - only used for final search of '_CoordinateAxisType'
    // Translate defintive axis to loose _CoordinateAxisType definition
-   var CoordAxis;
+   var CoordAxis = Axis;
    switch(Axis) {
     case 'X':
      CoordAxis = 'Lon';
@@ -1493,10 +1603,9 @@ class CFRender {
      CoordAxis = 'Time';
      break;
    }
-
    // Standard_Name - only used for final search of 'standard_name'
    // As last ditch attempt to determine axis
-   var StandardNameAxis;
+   var StandardNameAxis = Axis;
    switch(Axis) {
     case 'X':
      StandardNameAxis = 'longitude';
@@ -1508,109 +1617,122 @@ class CFRender {
      StandardNameAxis = 'time';
      break;
    }
-
-
+   // Projected axis names
+   var ProjectedNameAxis = Axis;
+   switch(Axis) {
+    case 'X':
+     ProjectedNameAxis = 'projection_x_coordinate';
+     break;
+    case 'Y':
+     ProjectedNameAxis = 'projection_y_coordinate';
+     break;
+   }
    for (let var_idx = 0; var_idx < this.netCDF.headers.variables.length; var_idx++) {
     let this_var = this.netCDF.headers.variables[var_idx]
-
     // Search for 'axis' == Axis
     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
      let this_attr = this_var.attributes[attr_idx]
-     if ((this_attr.name.toLowerCase() == 'axis') && 
-         (this_attr.value == Axis) && 
-         (this_var.dimensions.length == 1))
-      return this_var.name
-     // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+     if ((this_attr.name.toLowerCase() == 'axis') && (this_attr.value == Axis) &&
+      (this_var.dimensions.length == DimLength))
+       // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+       return {axis: this_var.name, ordinate: null}
     }
-   
     // Search for 'cartesian_axis' == Axis
     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
      let this_attr = this_var.attributes[attr_idx]
      if ((this_attr.name.toLowerCase() == 'cartesian_axis') && 
          (this_attr.value == Axis) && 
-         (this_var.dimensions.length == 1))
-      return this_var.name
-     // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+         (this_var.dimensions.length == DimLength))
+      // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+      //return this_var.name
+      return {axis: this_var.name, ordinate: null}
     }
-
-    // search for loosely supported '_CoordinateAxisType'
+    // search for '_CoordinateAxisType'
     // Translate defintive axis to loose _CoordinateAxisType definition
     if (CoordAxis) {
      for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
       let this_attr = this_var.attributes[attr_idx]
       if ((this_attr.name == '_CoordinateAxisType') && 
           (this_attr.value == CoordAxis) && 
-          (this_var.dimensions.length == 1))
-       return this_var.name
-      // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+          (this_var.dimensions.length == DimLength))
+       // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+       // return this_var.name
+       return {axis: this_var.name, ordinate: null}
      }
     }
-  
-    // Final last ditch attemp to search for 'standard_name' 
+    // Search for 'standard_name' 
     if (StandardNameAxis) {
      for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
       let this_attr = this_var.attributes[attr_idx]
       if ((this_attr.name == 'standard_name') && 
           (this_attr.value.toLowerCase() == StandardNameAxis) && 
-          (this_var.dimensions.length == 1))
-       return this_var.name
+          (this_var.dimensions.length == DimLength))
       // return this.netCDF.headers.dimensions[this_var.dimensions[0]].name
+      // return this_var.name
+      return {axis: this_var.name, ordinate: null}
      }
     }
-
+    // Search for projected data set
+    if (ProjectedNameAxis) {
+     for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
+      let this_attr = this_var.attributes[attr_idx]
+      if ((this_attr.name == 'standard_name') && 
+          (this_attr.value.toLowerCase() == ProjectedNameAxis) && 
+          (this_var.dimensions.length == DimLength)) {
+       // Search for associated var ordinate
+       var thisOrdinate = null
+       if (this_attr.value.toLowerCase() == 'projection_x_coordinate')
+         thisOrdinate = 'longitude'
+       if (this_attr.value.toLowerCase() == 'projection_y_coordinate')
+         thisOrdinate = 'latitude'
+       if (thisOrdinate) {
+        var varOrdinate = this.searchVariablesforAxis(thisOrdinate, 2)  
+        return {axis: this_var.name, ordinate: varOrdinate.axis}
+       } else {
+        return {axis: this_var.name, ordinate: null}
+       }
+      }
+     }
+    }
    }
-
    return undefined
   }
 
   getCleansedDataVariable(DataVariable) {
-
    let varIdx = this.varIndex[DataVariable]
    var FillValue = null, ScaleFactor = null, AddOffset = null;
-
    // Check for FillValue
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
     if ((FillValue == null) && ((this_attr.name == "_FillValue") || (this_attr.name == 'missing_value')))
      FillValue = this_attr.value
    }
-
    var varData = this.netCDF.getDataVariable(DataVariable).flat()
-
    if (FillValue != null)
     varData = varData.map(function(val) { return (val == FillValue) ? null : val }) 
-
    // Check for Packed Data
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
     if ((ScaleFactor == null) && (this_attr.name == "scale_factor") )
      ScaleFactor = this_attr.value
    }
-
    if (ScaleFactor != null) 
     varData = varData.map(function(val) { return (val != null) ? (val * ScaleFactor) : null }) 
-
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
     if ((AddOffset == null) && (this_attr.name == "add_offset") )
      AddOffset = this_attr.value
    }
-
    if (AddOffset != null) 
     varData = varData.map(function(val) { return (val != null) ? (val + AddOffset) : null }) 
-
    return varData
   }
 
-
   getCleansedDataVariableSingleValue(DataVariable, theValue) {
-
    if (theValue == null)
     return null;
-
    let varIdx = this.varIndex[DataVariable]
    var FillValue = null, ScaleFactor = null, AddOffset = null;
-
    // Check for FillValue
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
@@ -1618,50 +1740,39 @@ class CFRender {
         ((this_attr.name == "_FillValue") || (this_attr.name == 'missing_value')))
      FillValue = this_attr.value
    }
-
    if (theValue == FillValue)
     return null
-
    // Check for Packed Data
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
     if ((ScaleFactor == null) && (this_attr.name == "scale_factor") )
      ScaleFactor = this_attr.value
    }
-
    if (ScaleFactor != null)
     theValue*= ScaleFactor
-  
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
     if ((AddOffset == null) && (this_attr.name == "add_offset") )
      AddOffset = this_attr.value
    }
-
    if (AddOffset != null) 
     theValue+= AddOffset
-
    return theValue
   }
 
   getNumDataVariableStats(DataVariable) {
-
    if (!DataVariable)
     throw 'No data variable passed.'
-
    // Return stats if previously cached and file is in read only mode
-   if ((this.file_read_only) && (DataVariable in this.stats)) return this.stats[DataVariable]
-
+   if ((this.file_read_only) && (DataVariable in this.stats)) 
+    return this.stats[DataVariable]
    var varDataCleansed = this.getCleansedDataVariable(DataVariable)
-
    if (!varDataCleansed)
     throw `No data found for variable ${DataVariable}.`
-
    var NullCount = 0
    var MinValue = null
    var MaxValue = null
    var SumValue = 0
-
    for (let idx = 0; idx <varDataCleansed.length; idx++) {
     let d = varDataCleansed[idx]
     if (d == null) NullCount++
@@ -1669,13 +1780,11 @@ class CFRender {
     if ((MaxValue == null) || (MaxValue < d)) MaxValue = d
     SumValue+= d
    }
-  
    //median
    let cloneArray = [...varDataCleansed].filter(function(v){ return (v != null) })
    cloneArray.sort(function(a,b) { return a - b })
    let mid = cloneArray.length/2;
    let MedianValue = mid%1?cloneArray[mid - 0.5]:(cloneArray[mid - 1] + cloneArray[mid])/2;
-
    this.stats[DataVariable] =
     {"min": MinValue,
      "max": MaxValue,
@@ -1684,18 +1793,26 @@ class CFRender {
      "median": MedianValue,
      "nullCount": NullCount,
      "count": varDataCleansed.length}
-
    return this.stats[DataVariable]
+  }
 
+  getVariableUnits(DataVariable) {
+   if (!DataVariable)
+    throw 'No data variable passed.'
+   let var_idx = this.varIndex[DataVariable]
+   let this_var = this.netCDF.headers.variables[var_idx]
+   for (let attr_idx = 0; attr_idx < this_var.attributes.length; attr_idx++) {
+    let this_attr = this_var.attributes[attr_idx]
+    if (this_attr.name.toLowerCase() == 'units')
+     return this_attr.value
+   }
+   return null 
   }
 
   searchBounds(axis) {
-
    let Axis = this.Axes[axis]
    if (Axis) {
-   
     //TODO check bounds dimension size must equal 2
-   
     // Try definitive method
     let var_idx = this.varIndex[Axis]
     let this_var = this.netCDF.headers.variables[var_idx]
@@ -1712,7 +1829,6 @@ class CFRender {
       }
      }
     }
-   
     // Unable to automatically determine axis - so interpolate (assumes ordinates are sequential - ie, grid)
     let this_axis_data = this.netCDF.getDataVariable(Axis)
     let bounds_array=[]
@@ -1725,136 +1841,132 @@ class CFRender {
      bounds_array.push(parseFloat(this_axis_data[i] - delta))
      bounds_array.push(parseFloat(this_axis_data[i] + delta))
     }
-
     this.XYBounds[axis] = {"bounds": bounds_array, "mode": "interpolated"}
     return this.XYBounds[axis]
-   }
-
-   return null;
-  }
- 
-  getXYbbox() {
-
-   if ((this.file_read_only) && ('bounds' in this.XYbbox)) return this.XYbbox
-
-   let xBounds = this.searchBounds('X')
-   let yBounds = this.searchBounds('Y')
-   var the_mode = 'definitive'
-
-   if ((xBounds.mode != 'definitive') || (yBounds.mode != 'definitive'))
-    the_mode = 'interpolated'
-   var minX = null, maxX = null, minY = null, maxY = null
-
-   for (let i = 0; i < xBounds.bounds.length; i++) {
-    let x = xBounds.bounds[i]
-    if ((minX == null) || (minX > x)) minX = x
-    if ((maxX == null) || (maxX < x)) maxX = x
-   }
-
-   for (let i = 0; i < yBounds.bounds.length; i++) {
-    let y = yBounds.bounds[i]
-    if ((minY == null) || (minY > y)) minY = y
-    if ((maxY == null) || (maxY < y)) maxY = y
-   }
-
-   this.XYbbox = {"bbox": [[minX, minY],[maxX, maxY]], "mode": the_mode}
-   return this.XYbbox
-  }
-
-  hexToRgb(hex) {
-   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-   const resultSplit = result ? [  
-     parseInt(result[1], 16),
-     parseInt(result[2], 16),
-     parseInt(result[3], 16)
-   ] : null
-   if (resultSplit) {
-    return resultSplit
    }
    return null
   }
 
+  WorldWrap(lon, longitudeWrap) {
+   if (longitudeWrap || ((this.longitudeWrap !== undefined) && (this.longitudeWrap))) {
+    if (lon === null || lon === undefined || isNaN(lon)) 
+     return lon
+    while (lon > 360) lon -= 360
+    while (lon < 0) lon += 360
+    return lon
+   } else 
+   return lon 
+  }
+
+  getXYbbox() {
+   if ((this.file_read_only) && ('bounds' in this.XYbbox)) 
+    return this.XYbbox
+   if (this.is_projected_source)
+    return this.getXYbbox_projected_source()
+   else
+    return this.getXYbbox_cartesian_source()
+  }
+
+  getXYbbox_projected_source() {
+   let xVar = this.varOrdinate['X']
+   let yVar = this.varOrdinate['Y']
+   let xOrdinates = this.netCDF.getDataVariable(xVar).map((lon) => { return this.WorldWrap(lon, this.longitudeWrap); })
+   let yOrdinates = this.netCDF.getDataVariable(yVar)
+   var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+   for (let i = 0; i < xOrdinates.length; i++) {
+    let x = xOrdinates[i]
+    if (minX > x) minX = x
+    if (maxX < x) maxX = x
+   }
+   for (let i = 0; i < yOrdinates.length; i++) {
+    let y = yOrdinates[i]
+    if (minY > y) minY = y
+    if (maxY < y) maxY = y
+   }
+   this.XYbbox = {"bbox": [[minX, minY],[maxX, maxY]], "mode": "projected"}
+   return this.XYbbox
+  }
+
+  getXYbbox_cartesian_source() {
+   let xBounds = this.searchBounds('X')
+   let yBounds = this.searchBounds('Y')
+   var the_mode = 'definitive'
+   if ((xBounds.mode == 'interpolated') || (yBounds.mode == 'interpolated'))
+    the_mode = 'interpolated'
+   var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+   for (let i = 0; i < xBounds.bounds.length; i++) {
+    let x = this.WorldWrap(xBounds.bounds[i])
+    if (minX > x) minX = x
+    if (maxX < x) maxX = x
+   }
+   for (let i = 0; i < yBounds.bounds.length; i++) {
+    let y = yBounds.bounds[i]
+    if (minY > y) minY = y
+    if (maxY < y) maxY = y
+   }
+   this.XYbbox = {"bbox": [[minX, minY],[maxX, maxY]], "mode": the_mode}
+   return this.XYbbox
+  }
+
   preprocessDataValidation(DataVariable,
                            DimensionFilter) {
-  
    // Validate X/Y Axes
    if (!('X' in this.Axes))
     throw '"X" not found in Axes.  Please set X and Y in "Axes" manually if required.  Perhaps "Axis" = "X" missing from NetCDF attribute data.'
-
    let xDimName = this.Axes['X']
    if (!(xDimName in this.dimIndex))
     throw `"X" dimension ${xDimName} not found in NetCDF Dimensions`
    const xDimIndex = this.dimIndex[xDimName]
-
    if (!('Y' in this.Axes))
     throw '"Y" not found in Axes.  Please set X and Y in "Axes" manually if required.  Perhaps "Axis" = "Y" missing from NetCDF attribute data.'
-
    let yDimName = this.Axes['Y']
    if (!(yDimName in this.dimIndex))
     throw `"Y" dimension ${yDimName} not found in NetCDF Dimensions`
    const yDimIndex = this.dimIndex[yDimName]
-
    // Validate DataVariable 
- 
    if (!(DataVariable))
     throw 'DataVariable is a required parameter.'
-
    if (!(DataVariable in this.varIndex))
     throw `DataVariable ${DataVariable} not found in NetCDF Variables`
-
    const theVarIdx = this.varIndex[DataVariable]
    const theVariable = this.netCDF.headers.variables[theVarIdx]
-
    const varDimensions = theVariable.dimensions
-
    const xVarDimOffset = varDimensions.indexOf(xDimIndex)
    if (xVarDimOffset < 0)
     throw `"X" Axis "${xDimName}" not found as a dimension of ${DataVariable} in NetCDF.`
-
    const yVarDimOffset = varDimensions.indexOf(yDimIndex)
    if (yVarDimOffset < 0)
     throw `"Y" Axis "${yDimName}" not found as a dimension of ${DataVariable} in NetCDF.`
-
    // Check data is non-interlaced (that is X,Y are final data dimensions).  Currently, reading of interlaced data not yet supported
    var nonInterlaced = (((varDimensions.length - (xVarDimOffset + 1)) + (varDimensions.length - (yVarDimOffset + 1))) == 1)
    if (!nonInterlaced) 
     throw `Currently unable to perform interlaced data reading.  Please ensure "X" and "Y" are final dimensions in the Data Variable "${theVariable}."`
- 
    // Check any remaining dimensions are bound correctly with dimensionFilter
    for (let idx = 0; idx < varDimensions.length; idx++) {
     if ([xVarDimOffset, yVarDimOffset].indexOf(idx) < 0) {  //Not a spatial X,Y dimension
      let otherDimIdx = varDimensions[idx]
-
      if (!(otherDimIdx in this.netCDF.headers.dimensions)) 
       throw `Data Variable ${DataVariable} in NetCDF contains undefined dimensions.  Please check NetCDF.`
-
      let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
      if (!otherVarName)
       throw `Data Variable ${DataVariable} in NetCDF contains unamed dimension variables.  Please check NetCDF.`
-
      if (!(otherVarName in this.varIndex))
       throw `Data Variable ${DataVariable} in NetCDF contains undefined dimension variable: ${otherVarName}.  Please check NetCDF.`
-  
      // Check dimension data
      let otherVarData = this.netCDF.getDataVariable(otherVarName)
-
      // If only 1 entry in otherDataVariable and missing DimensionFilter - then just set dimensionFilter to this value
      if (((!DimensionFilter) || (!(otherVarName in DimensionFilter))) && (otherVarData.length == 1))
       DimensionFilter[otherVarName] = otherVarData[0]
-
      // Check Dimension Data Exists
      if ((DimensionFilter) && (otherVarName in DimensionFilter)) {
       if (otherVarData.indexOf(DimensionFilter[otherVarName]) < 0) 
        throw `DimensionFilter data value "${DimensionFilter[otherVarName]}" not found in NetCDF data values for variable ${otherVarName}.`
      }
-
      // Check for unbound Dimension
      if ((otherVarData) && (otherVarData.length > 0) && ((!DimensionFilter) || (!(otherVarName in DimensionFilter))))
       throw `Unbound dimension "${otherVarName}".  Please use DimensionFilter parameter and set "${otherVarName}" to a vaild value.`
-
     }
    }
-
    return {"xDimIndex": xDimIndex,
            "yDimIndex": yDimIndex,
            "xDimName": xDimName,
@@ -1867,148 +1979,71 @@ class CFRender {
    }
 
   getCellValue(DataVariable,
-               DimensionFilter,
+               DimensionFilter = {},
                X,
-               Y) {
-
-   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
-
+               Y,
+               omitValuesFunc) {
+   DimensionFilter = DimensionFilter || {}
    if (isNaN(X))
     throw 'X parameter missing or not numeric.'
-
    if (isNaN(Y))
     throw 'Y parameter missing or not numeric.'
-
+   const omitFunc = (typeof omitValuesFunc === 'function')?
+    function(val) { return omitValuesFunc(val) }: 
+    function(val) { return false }
    // Determine result array offset to use
-   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
-   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
-   let gridSize = xSize * ySize;
-   var startingOffset = gridSize;
-   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  
-    // Assumes data is non-interlaced and X,Y are final dimensions
-    let otherDimIdx = p.varDimensions[idx]
-    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
-    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
-    startingOffset *= otherVarIndex
+   // Need to scan data grid cells containing this point
+   // Pre process - assumes data grid with this DimensionFilter has already been built
+   // Projected get cell value query requires data grid 
+   if (!('grid' in this.data2DGrid))
+    throw 'Data2DGrid has not yet been created'
+   if (DimensionFilter) {
+    let DF1 = JSON.stringify(DimensionFilter)
+    let DF2 = JSON.stringify(this.data2DGrid['DimensionFilter'])
+    if (DF1 != DF2)
+     console.info("Data2DGrid DimensionFilter doesn't match query DimensionFilter.")
    }
-   if (p.varDimensions.length == 2)
-    startingOffset = 0
-
-   let the_data = this.netCDF.getDataVariable(DataVariable).flat()
-   let the_result = {}
-   var result_transpose = false;
-   var data_offset = startingOffset
-   let xData = this.netCDF.getDataVariable(p.xDimName)
-   let yData = this.netCDF.getDataVariable(p.yDimName)
-   let xDataLength = xData.length
-   let yDataLength = yData.length
-
-   if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
-
-    // Will Read Y,X
-    for (let x_idx = 0; x_idx < xDataLength; x_idx++) {
-     let x_idx_times_2 = x_idx * 2
-     let xLower = Math.min(this.XYBounds['X'].bounds[x_idx_times_2],
-                           this.XYBounds['X'].bounds[x_idx_times_2 + 1])
-     let xUpper = Math.max(this.XYBounds['X'].bounds[x_idx_times_2],
-                           this.XYBounds['X'].bounds[x_idx_times_2 + 1])
-     if ((xLower <= X) && (xUpper >= X)) {
-      // Within xBounds
-      for (let y_idx = 0; y_idx < yDataLength; y_idx++) {
-       let y_idx_times_2 = y_idx * 2
-       let yLower = Math.min(this.XYBounds['Y'].bounds[y_idx_times_2],
-                             this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
-       let yUpper = Math.max(this.XYBounds['Y'].bounds[y_idx_times_2],
-                             this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
-       if ((yLower <= Y) && (yUpper >= Y)) {
-        // Within yBounds
-        return this.getCleansedDataVariableSingleValue(DataVariable, the_data[data_offset])
-       }
-       data_offset++
-      }
-     } else
-      data_offset+= yDataLength
+   let projFunc = this.data2DGrid['XYprojectionFunction']
+   var point
+   if ((projFunc) && (typeof projFunc == 'function'))
+    point = this.data2DGrid['XYprojectionFunction']([this.WorldWrap(X),Y])
+   else
+    point = [X,Y]
+   let grid = this.data2DGrid['grid']
+   for (let i in grid)
+    for (let j in grid[i]) {
+     let cell = grid[i][j]
+     let poly = cell.poly
+     if ((poly) && 
+         (poly.length) && 
+         (this.pointInPolygon(poly, point)) &&
+         (!omitFunc(cell.value)))
+      return cell.value
     }
-
-   } else {
-
-    // Will Read Y,X
-    for (let y_idx = 0; y_idx < yDataLength; y_idx++) {
-     let y_idx_times_2 = y_idx * 2
-     let yLower = Math.min(this.XYBounds['Y'].bounds[y_idx_times_2],
-                           this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
-     let yUpper = Math.max(this.XYBounds['Y'].bounds[y_idx_times_2],
-                           this.XYBounds['Y'].bounds[y_idx_times_2 + 1])
-     if ((yLower <= Y) && (yUpper >= Y)) {
-      // Within yBounds
-      for (let x_idx = 0; x_idx < xDataLength; x_idx++) {
-       let x_idx_times_2 = x_idx * 2
-       let xLower = Math.min(this.XYBounds['X'].bounds[x_idx_times_2],
-                             this.XYBounds['X'].bounds[x_idx_times_2 + 1])
-       let xUpper = Math.max(this.XYBounds['X'].bounds[x_idx_times_2],
-                             this.XYBounds['X'].bounds[x_idx_times_2 + 1])
-       if ((xLower <= X) && (xUpper >= X)) {
-        // Within xBounds
-        return this.getCleansedDataVariableSingleValue(DataVariable, the_data[data_offset])
-       }
-       data_offset++
-      }
-     } else
-      data_offset+= xDataLength
-    }
-
-   } 
-
-   return null;
+   return null
   }
 
-  generateCaches(XYprojectionFunction) {
-  
-   //Projection function
-   var localProjectionCache = {} 
-   let isFunc = typeof XYprojectionFunction == 'function'
-   const projFunc = (isFunc)?
+  make2DDataGrid(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip) {
+   if (this.is_projected_source)
+    return this.make2DDataGridProjected(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip) 
+   else
+    return this.make2DDataGridCartesian(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip) 
+  }
+
+  make2DDataGridCartesian(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip) {
+   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
+   const localProjectionCache = this.projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
     function(coords) { 
-     if ((coords[0] in localProjectionCache) &&
-         (coords[1] in localProjectionCache[coords[0]])) {
-      return localProjectionCache[coords[0]][coords[1]]
+     const key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
      } else {
       let projectedCoords = XYprojectionFunction(coords)
-      if (!(coords[0] in localProjectionCache))
-       localProjectionCache[coords[0]] = {}
-      localProjectionCache[coords[0]][coords[1]] = projectedCoords
+      localProjectionCache.set(key, projectedCoords);
       return projectedCoords
      }
-    }:
-    function(coords) { return coords; }
-
-   var xRange, yRange, minPoint, maxPoint
-   var extentCache = {} 
-   var bounds = this.getXYbbox().bbox
-   //find minXY 
-   var xMin=Infinity, yMin=Infinity, xMax=-Infinity, yMax=-Infinity
-   for (let x=0; x < this.XYBounds['X'].bounds.length; x++) 
-    for (let y=0; y < this.XYBounds['Y'].bounds.length; y++) {
-     let the_point = projFunc([this.XYBounds['X'].bounds[x], this.XYBounds['Y'].bounds[y]])
-     if (the_point[0] < xMin) xMin = the_point[0]
-     if (the_point[1] < yMin) yMin = the_point[1]
-     if (the_point[0] > xMax) xMax = the_point[0]
-     if (the_point[1] > yMax) yMax = the_point[1]
-    }
-   minPoint = [xMin, yMin]
-   maxPoint = [xMax, yMax]
-
-   return {"extentCache": [minPoint, maxPoint], "projectionCache": localProjectionCache}
-  }
- 
-  draw2DbasicGrid(DataVariable,
-                  DimensionFilter,
-                  XYprojectionFunction,
-                  ImageType,
-                  ImageStyle) {
-
-   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
-
+    }:function(coords) { return coords; }
    // Determine result array offset to use
    let xSize = this.netCDF.getDataVariable(p.xDimName).length;
    let ySize = this.netCDF.getDataVariable(p.yDimName).length;
@@ -2022,49 +2057,541 @@ class CFRender {
    }
    if (p.varDimensions.length == 2)
     startingOffset = 0
-
    // Fetch data
    let the_data =  this.getCleansedDataVariable(DataVariable)
    let the_result = {}
    var result_transpose = false;
    var data_offset = startingOffset
+   var is_projected_source = false
    var xData = this.netCDF.getDataVariable(p.xDimName)
    var yData = this.netCDF.getDataVariable(p.yDimName)
    if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
     // Will Read X,Y
+    this.Log('Reading cartesian grid data as X,Y')
     for (let x_idx = 0; x_idx < xData.length; x_idx++) {
      if (!(xData[x_idx] in the_result)) 
       the_result[xData[x_idx]] = {} 
      for (let y_idx = 0; y_idx < yData.length; y_idx++) {
       if (!(yData[y_idx] in the_result[xData[x_idx]])) 
        the_result[xData[x_idx]][yData[y_idx]] = {} 
-      the_result[xData[x_idx]][yData[y_idx]] =  {
+      let cell_dimensions = { ... DimensionFilter }
+      cell_dimensions[p.xDimName] = xData[x_idx]
+      cell_dimensions[p.yDimName] = yData[y_idx] 
+      let the_cell = {
        "x_offset": x_idx,
        "y_offset": y_idx,
-       "value": the_data[data_offset] 
-      } 
+       "X": xData[x_idx],
+       "Y": yData[y_idx],
+       "poly": this.makeCartesianPoly(x_idx, y_idx, projFunc, meridianSkip),
+       "value": the_data[data_offset],
+       "dimensions": cell_dimensions
+      }
+      the_result[xData[x_idx]][yData[y_idx]] =  the_cell
       data_offset++
      }
     }
    } else {
     result_transpose = true;
     // Will Read Y,X
+    this.Log('Reading cartesian grid data as Y,X')
     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
      if (!(yData[y_idx] in the_result)) 
       the_result[yData[y_idx]] = {} 
      for (let x_idx = 0; x_idx < xData.length; x_idx++) {
       if (!(xData[x_idx] in the_result[yData[y_idx]])) 
        the_result[yData[y_idx]][xData[x_idx]] = {} 
-      the_result[yData[y_idx]][xData[x_idx]] =  {
-        "x_offset": x_idx,
-        "y_offset": y_idx,
-        "value": the_data[data_offset] 
-      } 
+      let cell_dimensions = { ... DimensionFilter }
+      cell_dimensions[p.xDimName] = xData[x_idx]
+      cell_dimensions[p.yDimName] = yData[y_idx] 
+      let the_cell = {
+       "x_offset": x_idx,
+       "y_offset": y_idx,
+       "X": xData[x_idx],
+       "Y": yData[y_idx],
+       "poly": this.makeCartesianPoly(x_idx, y_idx, projFunc, meridianSkip),
+       "value": the_data[data_offset],
+       "dimensions": cell_dimensions
+      }
+      the_result[yData[y_idx]][xData[x_idx]] =  the_cell
       data_offset++
      }
     }
    }
+   return {"grid": the_result, 
+           "preProcess": p,
+           "xSize": xSize,
+           "ySize": ySize,
+           "DimensionFilter": DimensionFilter,
+           "XYprojectionFunction": XYprojectionFunction}
+  }
 
+  make2DDataGridProjected(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip) {
+   const localProjectionCache = this.projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     const key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      localProjectionCache.set(key, projectedCoords);
+      return projectedCoords
+     }
+    }:function(coords) { return coords; }
+   const p = this.preprocessDataValidation(DataVariable, DimensionFilter)
+   const xAxisSize = this.netCDF.headers.dimensions[p.xDimIndex].size
+   const xOrdinate = this.varOrdinate['X']
+   const xOrdVarIdx = this.varIndex[xOrdinate]
+   const xOrdVarDim = this.netCDF.headers.variables[xOrdVarIdx].dimensions
+   var xy_physical_ordering = true
+   if ((xOrdVarDim) &&
+       (xOrdVarDim.length > 1) &&
+       ((xOrdVarDim[0] != p.yDimIndex) || (xOrdVarDim[1] != p.xDimIndex)))
+    xy_physical_ordering = false  // This variable is not x,y ordered.  Assume it is y,x ordered
+   const yAxisSize = this.netCDF.headers.dimensions[p.yDimIndex].size
+   const yOrdinate = this.varOrdinate['Y']
+   const yOrdVarIdx = this.varIndex[yOrdinate]
+   const xOrdinateData = this.netCDF.getDataVariable(xOrdinate).map((x) => { return this.WorldWrap(x, this.longitudeWrap) })
+   const yOrdinateData = this.netCDF.getDataVariable(yOrdinate)
+   // Determine result array offset to use
+   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
+   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
+   let gridSize = xSize * ySize;
+   var startingOffset = gridSize;
+   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  // Assumes data is non-interlaced and X,Y are final dimensions
+    let otherDimIdx = p.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    startingOffset *= otherVarIndex
+   }
+   if (p.varDimensions.length == 2)
+    startingOffset = 0
+   // Fetch data
+   let the_data =  this.getCleansedDataVariable(DataVariable)
+   let the_result = {}
+   var result_transpose = false;
+   var data_offset = startingOffset
+   var is_projected_source = false
+   var xData, yData;
+   var xData = this.netCDF.getDataVariable(p.xDimName)
+   var yData = this.netCDF.getDataVariable(p.yDimName)
+   if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
+    // Will Read X,Y
+    this.Log('Reading projected grid data as X,Y')
+    for (let x_idx = 0; x_idx < xData.length; x_idx++) {
+     if (!(xData[x_idx] in the_result)) 
+      the_result[xData[x_idx]] = {} 
+     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
+      if (!(yData[y_idx] in the_result[xData[x_idx]])) 
+       the_result[xData[x_idx]][yData[y_idx]] = {} 
+      let cell_dimensions = { ... DimensionFilter }
+      cell_dimensions[p.xDimName] = xData[x_idx]
+      cell_dimensions[p.yDimName] = yData[y_idx] 
+      let the_cell = {
+       "x_offset": x_idx,
+       "y_offset": y_idx,
+       "X": xData[x_idx],
+       "Y": yData[y_idx],
+       "poly": this.makePoly(
+                this.makeInterpolatedCell(
+                          xy_physical_ordering,
+                          xSize,
+                          ySize,
+                          x_idx,
+                          y_idx,
+                          xOrdinateData,
+                          yOrdinateData,
+                          projFunc,
+                          meridianSkip)
+                ),
+       "value": the_data[data_offset],
+       "dimensions": cell_dimensions
+      }
+      the_result[xData[x_idx]][yData[y_idx]] =  the_cell
+      data_offset++
+     }
+    }
+   } else {
+    result_transpose = true;
+    // Will Read Y,X
+    this.Log('Reading projected grid data as Y,X')
+    for (let y_idx = 0; y_idx < yData.length; y_idx++) {
+     if (!(yData[y_idx] in the_result)) 
+      the_result[yData[y_idx]] = {} 
+     for (let x_idx = 0; x_idx < xData.length; x_idx++) {
+      if (!(xData[x_idx] in the_result[yData[y_idx]])) 
+       the_result[yData[y_idx]][xData[x_idx]] = {} 
+      let cell_dimensions = { ... DimensionFilter }
+      cell_dimensions[p.xDimName] = xData[x_idx]
+      cell_dimensions[p.yDimName] = yData[y_idx] 
+      let the_cell = {
+       "x_offset": x_idx,
+       "y_offset": y_idx,
+       "X": xData[x_idx],
+       "Y": yData[y_idx],
+       "poly": this.makePoly(
+                this.makeInterpolatedCell(
+                          xy_physical_ordering,
+                          xSize,
+                          ySize,
+                          x_idx,
+                          y_idx,
+                          xOrdinateData,
+                          yOrdinateData,
+                          projFunc,
+                          meridianSkip)
+                ),
+       "value": the_data[data_offset],
+       "dimensions": cell_dimensions
+      }
+      the_result[yData[y_idx]][xData[x_idx]] =  the_cell
+      data_offset++
+     }
+    }
+   }
+   return {"grid": the_result, 
+           "preProcess": p,
+           "xSize": xSize,
+           "ySize": ySize,
+           "DimensionFilter": DimensionFilter,
+           "XYprojectionFunction": XYprojectionFunction}
+  }
+
+  makeCartesianPoly(i, j, projFunc, meridianSkip) {
+   // Make a closed 4 point cell polygon (assumes this.XYBounds already built)
+   let x_offset_times_2 = i * 2
+   let y_offset_times_2 = j * 2
+   let x_offset_times_2_plus_1 = x_offset_times_2 + 1 
+   let y_offset_times_2_plus_1 = y_offset_times_2 + 1 
+
+   if (isFinite(meridianSkip)) {
+    if  ((this.XYBounds['X'].bounds[x_offset_times_2] <= meridianSkip) &&
+         (this.XYBounds['X'].bounds[x_offset_times_2_plus_1] > meridianSkip)) 
+     return [] 
+    }
+   let x1 = this.WorldWrap(this.XYBounds['X'].bounds[x_offset_times_2])
+   let x2 = this.WorldWrap(this.XYBounds['X'].bounds[x_offset_times_2_plus_1])
+   if (this.longitudeWrap) {
+    if (((x1 - x2)  > 180) || ((x2 - x1) > 180))  // Faster than Math.abs
+    return [] 
+   }
+   let minXminY = projFunc([x1, this.XYBounds['Y'].bounds[y_offset_times_2]])
+   let minXmaxY = projFunc([x1, this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
+   let maxXmaxY = projFunc([x2, this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
+   let maxXminY = projFunc([x2, this.XYBounds['Y'].bounds[y_offset_times_2]])
+   return [minXminY, minXmaxY, maxXmaxY, maxXminY, minXminY]
+  }
+
+  makeInterpolatedCell(
+       xy_physical_ordering,
+       xSize,
+       ySize,
+       x_idx,
+       y_idx,
+       xOrdinateData,
+       yOrdinateData,
+       projFunc,
+       meridianSkip) {
+
+   // Omit edge boundary cells
+   if ((x_idx <= 1) || (y_idx <= 1) ||
+       (x_idx >= xSize - 2) || (y_idx >= ySize - 2)) 
+    return null
+   
+   // Calculate 3x3 grid 9 points offsets
+   if (xy_physical_ordering) {
+    // x,y physical ordering
+    var P11 = y_idx * xSize + x_idx
+    var P01 = y_idx * xSize + x_idx - 1
+    var P21 = y_idx * xSize + x_idx + 1
+    var P10 = y_idx * xSize + x_idx - xSize
+    var P00 = y_idx * xSize + x_idx - xSize - 1
+    var P20 = y_idx * xSize + x_idx - xSize + 1
+    var P12 = y_idx * xSize + x_idx + xSize
+    var P02 = y_idx * xSize + x_idx + xSize - 1
+    var P22 = y_idx * xSize + x_idx + xSize + 1
+   } else {
+    // y,x physical ordering
+    var P11 = x_idx * ySize + y_idx
+    var P01 = x_idx * ySize + y_idx - 1
+    var P21 = x_idx * ySize + y_idx + 1
+    var P10 = x_idx * ySize + y_idx - ySize
+    var P00 = x_idx * ySize + y_idx - ySize - 1
+    var P20 = x_idx * ySize + y_idx - ySize + 1
+    var P12 = x_idx * ySize + y_idx + ySize
+    var P02 = x_idx * ySize + y_idx + ySize - 1
+    var P22 = x_idx * ySize + y_idx + ySize + 1
+   }
+   const x_00 = this.WorldWrap(xOrdinateData[P00])
+   const x_10 = this.WorldWrap(xOrdinateData[P10])
+   const x_20 = this.WorldWrap(xOrdinateData[P20])
+   const x_01 = this.WorldWrap(xOrdinateData[P01])
+   const x_11 = this.WorldWrap(xOrdinateData[P11])
+   const x_21 = this.WorldWrap(xOrdinateData[P21])
+   const x_02 = this.WorldWrap(xOrdinateData[P02])
+   const x_12 = this.WorldWrap(xOrdinateData[P12])
+   const x_22 = this.WorldWrap(xOrdinateData[P22])
+   if ((isFinite(meridianSkip)) || (this.longitudeWrap)) {
+    let xOrds = [
+     x_00,
+     x_10,
+     x_20,
+     x_01,
+     x_11,
+     x_21,
+     x_02,
+     x_12,
+     x_22
+    ].sort((a, b) => a.value - b.value)
+    if  ((isFinite(meridianSkip)) &&
+          (xOrds[0] <= meridianSkip) &&
+          (xOrds[xOrds.length - 1] > meridianSkip))
+     return [] 
+    if (this.longitudeWrap) {
+     // Faster than Math.abs
+     if ((xOrds[0] - xOrds[xOrds.length - 1]) > 180)
+      return []
+     if ((xOrds[xOrds.length - 1] - xOrds[0]) > 180)
+      return []
+    }
+   }
+   try {
+    const point_00 = projFunc([x_00, yOrdinateData[P00]])
+    const point_10 = projFunc([x_10, yOrdinateData[P10]])
+    const point_20 = projFunc([x_20, yOrdinateData[P20]])
+    const point_01 = projFunc([x_01, yOrdinateData[P01]])
+    const point_11 = projFunc([x_11, yOrdinateData[P11]])
+    const point_21 = projFunc([x_21, yOrdinateData[P21]])
+    const point_02 = projFunc([x_02, yOrdinateData[P02]])
+    const point_12 = projFunc([x_12, yOrdinateData[P12]])
+    const point_22 = projFunc([x_22, yOrdinateData[P22]])
+    return {
+     "NW": this.findCentroid([point_00, point_01, point_11, point_10]),
+     "SW": this.findCentroid([point_01, point_02, point_12, point_11]),
+     "SE": this.findCentroid([point_11, point_12, point_22, point_21]),
+     "NE": this.findCentroid([point_10, point_11, point_21, point_20]) 
+     }
+   } catch(e) {
+    return null
+   }
+  }
+
+  makePoly(cell) {
+   if (!cell)
+    return []
+   if (("NW" in cell) &&
+       ("SW" in cell) &&
+       ("SE" in cell) &&
+       ("NE" in cell))
+    return [
+     cell['NW'], 
+     cell['SW'], 
+     cell['SE'], 
+     cell['NE'], 
+     cell['NW'] 
+    ]
+  return []
+  }
+
+  translateOrdinates(coords, minX, maxY) {
+   let xt = coords[0] - minX
+   let yt = maxY - coords[1]
+   return [xt, yt]
+  }
+
+  scaleOrdinates(coords, scaleX, scaleY) {
+   let xs = coords[0] * scaleX 
+   let ys = coords[1] * scaleY
+   return [xs, ys]
+  }
+
+  makeSimpleSVGPath(polygon) {
+   var p = ''
+   for (let i=0; i<polygon.length; i++) {
+    if (p)
+     p += 'L'
+    else
+     p = 'M'
+    p += polygon[i][0].toString()+','+polygon[i][1].toString()
+   }
+   if (p)
+    p += 'z'
+   return p
+  }
+
+  findCentroid(points) {
+   if (points.length === 0) 
+    throw new Error("No points provided")
+   let xSum = 0;
+   let ySum = 0;
+   const numPoints = points.length;
+   for (let i = 0; i < numPoints; i++) {
+    const [x, y] = points[i];
+    if (isNaN(x) || isNaN(y)) 
+     throw new Error(`Invalid point detected: [${x}, ${y}]`)
+    xSum += x;
+    ySum += y;
+   }
+   const centroid = [xSum / numPoints, ySum / numPoints];
+   return centroid;
+  }
+
+  pointInPolygon(points, p) {
+   let px = p[0]
+   let py = p[1]
+   let inside = false
+   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i][0], yi = points[i][1]
+    const xj = points[j][0], yj = points[j][1]
+    const intersect = ((yi > py) !== (yj > py)) &&
+     (px < (xj - xi) * (py - yi) / (yj - yi) + xi)
+    if (intersect) inside = !inside
+   }
+   return inside
+  }
+
+  hexToRgb(hex) {
+   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+   const resultSplit = result ? [  
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+   ] : null
+   if (resultSplit) {
+    return resultSplit
+   }
+   return null
+  }
+
+  generateCaches(XYprojectionFunction) {
+   let extent = this.findExtent(XYprojectionFunction, null) 
+   return {"extentCache": extent['extent'], "projectionCache": extent['projectionCache']}
+  }
+
+  findExtent(XYprojectionFunction, projectionCache) {
+   if (this.is_projected_source)
+    return this.findExtent_projected_source(XYprojectionFunction, projectionCache)
+   else
+    return this.findExtent_cartesian_source(XYprojectionFunction, projectionCache)
+  }
+
+  findExtent_cartesian_source(XYprojectionFunction, projectionCache) {
+   //Local projection function
+   var localProjectionCache
+   if (!projectionCache)
+    localProjectionCache = new Map()
+   else
+    localProjectionCache = projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     const key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      localProjectionCache.set(key, projectedCoords);
+      return projectedCoords
+     }
+    }:function(coords) { return coords; }
+   // Cartesain getXYbbox has side effect of setting bounds and must be run first if not already
+   if ((!('X' in this.XYBounds)) || (!('Y' in this.XYBounds))) {
+    let discard = this.getXYbbox()
+   }
+   // Find extent in Cartesian source coordinates
+   var xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity
+   // Find minXY  (interpolated or definitive)
+   for (let x=0; x < this.XYBounds['X'].bounds.length; x++) {
+    for (let y=0; y < this.XYBounds['Y'].bounds.length; y++) {
+     let the_point = projFunc([this.WorldWrap(this.XYBounds['X'].bounds[x]), this.XYBounds['Y'].bounds[y]])
+     if (the_point[0] < xMin) xMin = the_point[0]
+     if (the_point[1] < yMin) yMin = the_point[1]
+     if (the_point[0] > xMax) xMax = the_point[0]
+     if (the_point[1] > yMax) yMax = the_point[1]
+    }
+   }
+   let minPoint = [xMin, yMin]
+   let maxPoint = [xMax, yMax]
+   let extent = [minPoint, maxPoint]
+   return {"extent": extent, "projectionCache": localProjectionCache}
+  }
+
+  findExtent_projected_source(XYprojectionFunction, projectionCache) {
+   //Local projection function
+   var localProjectionCache
+   if (!projectionCache)
+    localProjectionCache = new Map() 
+   else
+    localProjectionCache = projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     const key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      localProjectionCache.set(key, projectedCoords);
+      return projectedCoords
+     }
+    }:function(coords) { return coords; }
+   // Find extent in Projected source coordinates
+   var xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity
+   let xVar = this.varOrdinate['X']
+   let yVar = this.varOrdinate['Y']
+   let xOrdinates = this.netCDF.getDataVariable(xVar).map((x) => { return this.WorldWrap(x, this.longitudeWrap) })
+   let yOrdinates = this.netCDF.getDataVariable(yVar)
+   // Assume x and y are exactly the same cardinality and length
+   for (let i = 0; i < xOrdinates.length; i++) {
+    let x = xOrdinates[i]
+    let y = yOrdinates[i]
+    let the_point = projFunc([x, y])
+    if (the_point[0] < xMin) xMin = the_point[0]
+    if (the_point[1] < yMin) yMin = the_point[1]
+    if (the_point[0] > xMax) xMax = the_point[0]
+    if (the_point[1] > yMax) yMax = the_point[1]
+   }
+   let minPoint = [xMin, yMin]
+   let maxPoint = [xMax, yMax]
+   let extent = [minPoint, maxPoint]
+   return {"extent": extent, "projectionCache": localProjectionCache}
+  }
+
+  async convertOffscreenCanvasToDataURL(offscreenCanvas, imgType, imgQuality) {
+   var blob
+   if ((imgType) || (imgQuality))
+    blob = await offscreenCanvas.convertToBlob({type: imgType, quality: imgQuality})
+   else
+    blob = await offscreenCanvas.convertToBlob()
+   return new Promise((resolve, reject) => {
+     const reader = new FileReader();
+     reader.onloadend = () => resolve(reader.result)
+     reader.onerror = reject
+     reader.readAsDataURL(blob)
+   })
+  }
+
+  async convertToDataURL(offscreenCanvas, imgType, imgQuality) {
+   const url = await this.convertOffscreenCanvasToDataURL(offscreenCanvas, imgType, imgQuality)
+   return url;
+  }
+
+  async draw2DbasicGrid(DataVariable,
+                        DimensionFilter = {},
+                        XYprojectionFunction,
+                        ImageType,
+                        ImageStyle) {
+
+   DimensionFilter = DimensionFilter || {}
+   const bounds = this.getXYbbox().bbox
+   var meridianSkip = null
+   if (ImageStyle) {
+    if ('meridianSkip' in ImageStyle) {
+     if (typeof ImageStyle['meridianSkip'] === 'number')
+      meridianSkip = ImageStyle['meridianSkip']
+     }
+   }
+   this.Log('Making data grid')
+   this.data2DGrid = this.make2DDataGrid(DataVariable, DimensionFilter, XYprojectionFunction, meridianSkip)
+   const p = this.data2DGrid['preProcess']
    // Set ImageType
    ImageType = ((ImageType) && (ImageType.toLowerCase()))
    switch (ImageType) {
@@ -2073,61 +2600,26 @@ class CFRender {
     case 'url':  break; 
     default:  ImageType = 'image' 
    }
-
-   //Projection function
-   var localProjectionCache = this.projectionCache
-   const projFunc = (typeof XYprojectionFunction == 'function')?
-    function(coords) { 
-     if  ((coords[0] in localProjectionCache) &&
-          (coords[1] in localProjectionCache[coords[0]])) {
-      // Cache hit
-      return localProjectionCache[coords[0]][coords[1]]
-     } else {
-      let projectedCoords = XYprojectionFunction(coords)
-      if (!localProjectionCache)
-       localProjectionCache = {}
-      if (!(coords[0] in localProjectionCache))
-       localProjectionCache[coords[0]] = {}
-      localProjectionCache[coords[0]][coords[1]] = projectedCoords
-      return projectedCoords
-     }
-    }:
-    function(coords) { return coords; }
-
-   var xRange, yRange, minPoint, maxPoint, BoundsAspectRatio;
-   var bounds = this.getXYbbox().bbox
+   var xRange, yRange, minPoint, maxPoint
    if ((this.extentCache) &&
        (this.extentCache.length == 2) &&
        (this.extentCache[0].length == 2) &&
        (this.extentCache[1].length == 2)) {
     // extentCache hit
-    if (this.debug)
-     console.log('Extent Cache hit.')
-    minPoint = this.extentCache[0]
-    maxPoint = this.extentCache[1]
+    this.Log('Extent Cache hit.')
    } else {
-     //find minXY 
-     var xMin=Infinity, yMin=Infinity, xMax=-Infinity, yMax=-Infinity
-     for (let x=0; x < this.XYBounds['X'].bounds.length; x++) 
-      for (let y=0; y < this.XYBounds['Y'].bounds.length; y++) {
-       let the_point = projFunc([this.XYBounds['X'].bounds[x], this.XYBounds['Y'].bounds[y]])
-       if (the_point[0] < xMin) xMin = the_point[0]
-       if (the_point[1] < yMin) yMin = the_point[1]
-       if (the_point[0] > xMax) xMax = the_point[0]
-       if (the_point[1] > yMax) yMax = the_point[1]
-      }
-     this.projectionCache = localProjectionCache  //Update global projectionCache
-     minPoint = [xMin, yMin]
-     maxPoint = [xMax, yMax]
-     if (!this.extentCache)
-      this.extentCache = {}
-     this.extentCache = [minPoint, maxPoint]  // Update global extentCache
-    }
+    this.Log('Extent Cache miss.')
+    let e = this.findExtent(XYprojectionFunction, this.projectionCache)
+    this.extentCache = e['extent']
+    this.projectionCache = e['projectionCache']
+   }
+   minPoint = this.extentCache[0]
+   maxPoint = this.extentCache[1]
    xRange = maxPoint[0] - minPoint[0]
    yRange = maxPoint[1] - minPoint[1]
-
-   var BoundsAspectRatio = parseFloat(yRange/xRange)
-
+   const xSize = this.data2DGrid['xSize']
+   const ySize = this.data2DGrid['ySize']
+   const BoundsAspectRatio = parseFloat(yRange/xRange)
    // WebGL Vertex shader source code
    const vertexShaderSource = `
      attribute vec2 a_position;
@@ -2138,7 +2630,6 @@ class CFRender {
        v_fillColor = a_fillColor;
      }
    `;
-
    // WebGL Fragment shader source code
    const fragmentShaderSource = `
     precision mediump float;
@@ -2148,21 +2639,19 @@ class CFRender {
      gl_FragColor = color1;
     }
    `;
-
    if (ImageType == 'svg') {
-    // Svg
+    // SVG
     var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svgElement.setAttribute('xmlns', "http://www.w3.org/2000/svg");
     svgElement.setAttribute('width', '100%')
     svgElement.setAttribute('height', '100%')
     svgElement.setAttribute('viewBox', "0 0 "+xRange.toString()+" "+yRange.toString());
-    //TODO xlink:href for title?
-    //TODO aspectRatio (as style param)?
+    svgElement.setAttribute('preserveAspectRatio', 'none')
    } else {
     // Canvas
     // See; https://developer.mozilla.org/en-US/docs/Web/HTML/Element/canvas#maximum_canvas_size
     const BROWSER_MAX_CANVAS_WIDTH = 16000  
-    var idealCellSize = 8; 
+    var idealCellSize = this.defaultIdealCellSize
     if (ImageStyle) {
         if ('idealCellSize' in ImageStyle) {
          if (typeof ImageStyle['idealCellSize'] === 'number')
@@ -2173,17 +2662,19 @@ class CFRender {
     const cell_pixel_size = parseInt(Math.max(1, Math.min(idealCellSize, maxCellSize)))
     var pixel_width = Math.max(xSize, ySize) * cell_pixel_size;  //Good enough approximation
     var pixel_height = pixel_width * BoundsAspectRatio;
-
-    var canvasElement = document.createElement("canvas");
-    canvasElement.height = pixel_height;
-    canvasElement.width = pixel_width;
-
+    var canvasElement
+    if (ImageType == 'url') 
+     canvasElement = new OffscreenCanvas(pixel_width, pixel_height)
+    else {
+     canvasElement = document.createElement("canvas")
+     canvasElement.height = pixel_height
+     canvasElement.width = pixel_width
+    }
     var pixel_width_over_xRange = pixel_width / xRange
     var pixel_height_over_yRange = pixel_height / yRange
     var two_over_xRange = 2 / xRange
     var two_over_yRange = 2 / yRange
     var allGLverts = [], allGLcolors = []
-
     var theCanvasContext = "2d"
     if (ImageStyle) {
      if ('canvasContext' in ImageStyle) {
@@ -2191,16 +2682,13 @@ class CFRender {
        theCanvasContext = ImageStyle['canvasContext']
      }
     }
-
     if (['webgl', 'experimental-webgl', '2d'].indexOf(theCanvasContext) < 0)
      theCanvasContext = '2d'
-
     var ctx = canvasElement.getContext(theCanvasContext, 
                                        {antialias: true, 
                                         desynchronized: true, 
                                         alpha: true, 
                                         premultipliedAlpha: false });
-
     if ((theCanvasContext == 'webgl') || (theCanvasContext == 'experimental-webgl')) {
      var vertexShader = ctx.createShader(ctx.VERTEX_SHADER);
      ctx.shaderSource(vertexShader, vertexShaderSource);
@@ -2217,27 +2705,20 @@ class CFRender {
      ctx.useProgram(shaderProgram);
     }
    }
-
-   //Assume getXYbbox has already been run (TODO need to check)
-
+   //Assume getXYbbox has already been run 
    var cellcount = 0
+   const the_result = this.data2DGrid['grid']
    for (let i in the_result)
     for (let j in the_result[i]) {
-     if (the_result[i][j].value != null) {  
-
-      // Assemble cellData
-      let cellData = {}
-      cellData.dimensions = DimensionFilter;
-      cellData.value = the_result[i][j].value
- 
-      if (!(result_transpose)) {
-       cellData.dimensions[p.xDimName] = i
-       cellData.dimensions[p.yDimName] = j
-      } else {
-       cellData.dimensions[p.xDimName] = j
-       cellData.dimensions[p.yDimName] = i
-      } 
-
+     if (
+         (the_result[i][j].value != null) && 
+         (!(
+            (typeof the_result[i][j].value === 'number') && 
+            (!isFinite(the_result[i][j].value))
+           )
+         )
+        ) {  
+      let cellData = the_result[i][j]
       var omit = false
       if (ImageStyle) {
        if ('omit' in ImageStyle) {
@@ -2249,30 +2730,10 @@ class CFRender {
          omit = ImageStyle['omit']
        }
       }
-     
       if (omit) 
        continue
-
-      let x_offset_times_2 = the_result[i][j].x_offset * 2
-      let y_offset_times_2 = the_result[i][j].y_offset * 2
-      let x_offset_times_2_plus_1 = x_offset_times_2 + 1
-      let y_offset_times_2_plus_1 = y_offset_times_2 + 1
-      let minXminY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2], this.XYBounds['Y'].bounds[y_offset_times_2]])
-      let x1 = minXminY[0] - minPoint[0]
-      let y1 = maxPoint[1] - minXminY[1]
-      let minXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2], this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
-      let x2 = minXmaxY[0] - minPoint[0]
-      let y2 = maxPoint[1] - minXmaxY[1]
-      let maxXmaxY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2_plus_1], this.XYBounds['Y'].bounds[y_offset_times_2_plus_1]])
-      let x3 = maxXmaxY[0] - minPoint[0]
-      let y3 = maxPoint[1] - maxXmaxY[1]
-      let maxXminY = projFunc([this.XYBounds['X'].bounds[x_offset_times_2_plus_1], this.XYBounds['Y'].bounds[y_offset_times_2]])
-      let x4 = maxXminY[0] - minPoint[0]
-      let y4 = maxPoint[1] - maxXminY[1]
- 
       if (ImageType == 'svg') {
        var cellEvents = []
-      
        //Styling
        var stroke = "none", strokeWidth = 1, fill = "#000000", opacity = 1
        if (ImageStyle) {
@@ -2307,41 +2768,41 @@ class CFRender {
            if ((typeof this_event[0] === 'string') && (typeof this_event[1] === 'function')) 
             cellEvents.push(this_event)
           }
-             } catch(e) { if (this.debug) console.log(e); }
+             } catch(e) { this.Log(e) }
         }
        }
-
        let cell = document.createElementNS("http://www.w3.org/2000/svg", "path")
-       //var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'L'+x1+','+y1+'z'
-       //var path = "M"+x1+","+y1+'L'+x2+','+y2+'L'+x3+','+y3+'L'+x4+','+y4+'z'
-       let path = `M${x1},${y1}L${x2},${y2}L${x3},${y3}L${x4},${y4}z`
+       let translateOrds = this.translateOrdinates
+       let path = this.makeSimpleSVGPath(cellData.poly.map(coords =>
+                     translateOrds(coords, 
+                                   minPoint[0], 
+                                   maxPoint[1]) 
+                    )
+                   )
+       // Projected data edge case cells may not have data (omit)
+       if ((!path) || (path == ''))
+        continue
        cell.setAttribute("d", path)
-
        // Styling
        cell.setAttribute("fill", fill)
        cell.setAttribute("stroke", stroke)
        cell.setAttribute("stroke-width", strokeWidth.toString()+'px')
        cell.setAttribute("opacity", opacity.toString())
        cell.setAttribute("vector-effect", "non-scaling-stroke")
-      
+       cell.setAttribute('shape-rendering', "crispEdges")
        //Set cell data value and dimensions 
        cell.setAttribute('data-value', the_result[i][j].value)
        for (let dim in cellData.dimensions) {
         if ((cellData.dimensions[dim]) && (typeof cellData.dimensions[dim] != 'function'))
          cell.setAttribute('data-dimension_'+dim.replace(/\s/g, ''), cellData.dimensions[dim])
        }
-
        // Add events
        for (let ev = 0; ev < cellEvents.length; ev++)
          cell.addEventListener(cellEvents[ev][0],cellEvents[ev][1],cellEvents[ev][2])
- 
        svgElement.appendChild(cell) 
-
       } else {
        // Canvas
- 
        if (theCanvasContext == "2d") {
-
         //Styling
         var stroke = "none", strokeWidth = 1, fill = "#000000", opacity = 1
         if (ImageStyle) {
@@ -2370,33 +2831,41 @@ class CFRender {
            opacity = ImageStyle['opacity']
          }
         }
-  
-        let x1pixel = x1 * pixel_width_over_xRange
-        let x2pixel = x2 * pixel_width_over_xRange
-        let x3pixel = x3 * pixel_width_over_xRange
-        let x4pixel = x4 * pixel_width_over_xRange
-        let y1pixel = y1 * pixel_height_over_yRange
-        let y2pixel = y2 * pixel_height_over_yRange
-        let y3pixel = y3 * pixel_height_over_yRange
-        let y4pixel = y4 * pixel_height_over_yRange
-
-        if (opacity != null)
-         ctx.globalAlpha = opacity
-        ctx.beginPath();
-        ctx.fillStyle = fill
-        ctx.strokeStyle = stroke
-        ctx.moveTo(x1pixel, y1pixel);
-        ctx.lineTo(x2pixel, y2pixel)
-        ctx.lineTo(x3pixel, y3pixel)
-        ctx.lineTo(x4pixel, y4pixel)
-        if (fill != 'none')
-         ctx.fill()
-        if (stroke != 'none')
-         ctx.stroke()
-
+       let translateOrds = this.translateOrdinates
+       let scaleOrds = this.scaleOrdinates
+       let ords = cellData.poly.map(
+                   coords => 
+                    scaleOrds(
+                     translateOrds(coords, 
+                                   minPoint[0], 
+                                   maxPoint[1]),
+                     pixel_width_over_xRange,
+                     pixel_height_over_yRange) 
+           )
+       // Projected data edge case cells may not have data (omit)
+       if ((!ords) || (ords.length == 0)) 
+        continue
+       if (opacity != null)
+        ctx.globalAlpha = opacity
+       ctx.beginPath();
+       ctx.fillStyle = fill
+       ctx.strokeStyle = stroke
+       // Draw simple polygon
+       var drawing = false
+       for (let i=0; i<ords.length; i++) {
+        if (drawing) 
+         ctx.lineTo(ords[i][0], ords[i][1])
+        else {
+         drawing = true
+         ctx.moveTo(ords[i][0], ords[i][1])
+        }
+       }
+       if (fill != 'none')
+        ctx.fill()
+       if (stroke != 'none')
+        ctx.stroke()
        } else {
         // Webgl
-
         //Styling
         var fill = "#000000", opacity = 1 
         if (ImageStyle) {
@@ -2413,36 +2882,46 @@ class CFRender {
            opacity = ImageStyle['opacity']
          }
         }
-
-        let x1pixel = (x1 * two_over_xRange) - 1
-        let x2pixel = (x2 * two_over_xRange) - 1
-        let x3pixel = (x3 * two_over_xRange) - 1
-        let x4pixel = (x4 * two_over_xRange) - 1
-        let y1pixel = 1 - (y1 * two_over_yRange)
-        let y2pixel = 1 - (y2 * two_over_yRange)
-        let y3pixel = 1 - (y3 * two_over_yRange)
-        let y4pixel = 1 - (y4 * two_over_yRange)
-
+        let translateOrds = this.translateOrdinates
+        let scaleOrds = this.scaleOrdinates
+        let ords = cellData.poly.map(
+                    coords => 
+                     translateOrds(
+                      scaleOrds(
+                       translateOrds(coords, 
+                                     minPoint[0], 
+                                     maxPoint[1]),
+                       two_over_xRange,
+                       two_over_yRange),
+                      1,
+                      1)
+                   )
+        // Projected data edge case cells may not have data (omit)
+        if ((!ords) || (ords.length == 0))
+         continue
+        // WebGL renderer requries 4 vertex cell polygon
+        let x1pixel = ords[0][0]
+        let x2pixel = ords[1][0]
+        let x3pixel = ords[2][0]
+        let x4pixel = ords[3][0]
+        let y1pixel = ords[0][1]
+        let y2pixel = ords[1][1]
+        let y3pixel = ords[2][1]
+        let y4pixel = ords[3][1]
         allGLverts.push(x1pixel, y1pixel, x2pixel, y2pixel, x3pixel, y3pixel,  //Triangle 1
                         x3pixel, y3pixel, x4pixel, y4pixel, x1pixel, y1pixel )  //Triangle 2
-
-
         let fillPrimitive = this.hexToRgb(fill).map(function(color){ return color/255}) 
-
         allGLcolors.push(fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
                          fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
                          fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
                          fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
                          fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity,
                          fillPrimitive[0], fillPrimitive[1], fillPrimitive[2], opacity)
-
       }
      }
- 
     cellcount++
     }
    }
-
    // Send WebGL arrays to the GPU if using WebGL
    if ((theCanvasContext == "webgl") || (theCanvasContext == 'experimental-webgl')) {
     var vertLoc = ctx.getAttribLocation(shaderProgram, "a_position");
@@ -2463,10 +2942,7 @@ class CFRender {
     ctx.enableVertexAttribArray(colorLoc);
     ctx.drawArrays(ctx.TRIANGLES, 0, vertArray.length);
    }
-
-   if (this.debug)
-    console.log(`Cells Rendered; ${cellcount}`)
-
+   this.Log(`Cells Rendered; ${cellcount}`)
    var imgFormat = null, imgQuality = null
    if (ImageStyle) {
     if ('imageFormat' in ImageStyle) {
@@ -2478,11 +2954,15 @@ class CFRender {
       imgQuality = ImageStyle['imageQuality']
     }
    }
-
    switch (ImageType) {
     case 'svg': return svgElement; break
     case 'canvas': return canvasElement; break
-    case 'url': return canvasElement.toDataURL(imgFormat, imgQuality); break
+    //case 'url': return canvasElement.toDataURL(imgFormat, imgQuality); break
+    case 'url': {
+     let img = await this.convertToDataURL(canvasElement, imgFormat, imgQuality)
+     return img
+     break
+    }
     default: {
      var img = new Image()
      img.setAttribute('width', '100%')

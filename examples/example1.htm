@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
  <head>
-  <title>CFRender POC - Example 1</title>
+  <title>CFRender - Example 1</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI=" crossorigin="">
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM=" crossorigin=""></script>
-  <script src="../CFRender.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+   integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+   crossorigin=""/>
+  <script nonce="{$nonce}" src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+   crossorigin=""></script>
  <style>
 .mapdiv {
  border: 1px solid blue; 
@@ -15,15 +18,14 @@
  width: 580px; 
  max-width: 90%
 }
-.anim {
- transition: src 120ms linear;
-}
 body { 
- font-family: Arial
+ font-family: Arial;
 }
  </style>
 
- <script>
+ <script type="module">
+import { CFUtils, CFRender } from '../CFRender.js'
+import { surface_temperature_kelvin_stops } from './map_styles.js'
 
 // Some supporting functions to be passed to CFRender
 
@@ -33,13 +35,11 @@ function SphericalProjection(coords) {
  return [the_proj.x, the_proj.y]
 }
 
-var tos_stats
-let cf = new CFUtils()
+let cfu = new CFUtils()
 
 function tos_fillStyle(cellData) {
- return cf.linearHexColor(cellData.value, tos_stats.min, tos_stats.max, '#CC6666', '#000033')
+ return cfu.steppedHexColor(cellData.value, surface_temperature_kelvin_stops)
 }
-
 
 // Main script
 
@@ -63,29 +63,26 @@ function process_netcdf(arrayBuf) {
  console.log(CF)
  set_time_units(CF)
  console.log(time_units);
- 
- // Get data stats for variable 'tos'
- tos_stats = CF.getNumDataVariableStats('tos')
  status_msg('End Initial processing of NetCDF CF file')
  continue_shuffle = true
  render_times_images(0)
 }
 
 function set_time_units(CF) {
-  let vars = CF.netCDF.headers.variables;
-  // Hard coding dimension as 'time' for now
-  for (let v = 0; v < vars.length; v++) {
-      if (vars[v].name == 'time') {
-          let time_attribs = vars[v].attributes
-         for (let a = 0; a < time_attribs.length; a++) {
-          if (time_attribs[a].name == 'units')
-          time_units = time_attribs[a].value
-         }  
-      }
+ let vars = CF.netCDF.headers.variables;
+ // Hard coding dimension as 'time' for now
+ for (let v = 0; v < vars.length; v++) {
+  if (vars[v].name == 'time') {
+   let time_attribs = vars[v].attributes
+   for (let a = 0; a < time_attribs.length; a++) {
+    if (time_attribs[a].name == 'units')
+     time_units = time_attribs[a].value
+    }  
+   }
   }
 }
 
-function render_times_images(times_offset) {
+async function render_times_images(times_offset) {
  let times = CF.netCDF.getDataVariable('time')
  if ((times_offset == times.length) || (!continue_shuffle)) {
   status_msg('Finished Rendering Images')
@@ -96,16 +93,15 @@ function render_times_images(times_offset) {
  // Draw a Grid image based on 'tos' variable at a specific time dimension.
  // Use SphericalProjection function to project data to Leaflet map ordinates.
  // Return image as a dataURL ('url')
- let img = CF.draw2DbasicGrid('tos', 
-                              {"time": times[times_offset]}, 
-                              SphericalProjection, 
-                              'url',
-                              {"fill": tos_fillStyle,
-                               "stroke": "none",
-                               "strokeWidth": 0,
-                               "idealCellSize": 15,
-                               "canvasContext": "2d"
-                              })
+ let img = await CF.draw2DbasicGrid('tos', 
+                                    {"time": times[times_offset]}, 
+                                    SphericalProjection, 
+                                    'url',
+                                    {"fill": tos_fillStyle,
+                                     "stroke": "none",
+                                     "strokeWidth": 0,
+                                     "canvasContext": "2d"
+                                    })
 
  img_array.push({"src": img, "label": CFU.getTimeISOString(times[times_offset], time_units)})
  status_msg(`Rendered Image ${(times_offset+1)} of ${times.length}.`)
@@ -114,14 +110,14 @@ function render_times_images(times_offset) {
  if (!overlay) {
   let bounds = CF.getXYbbox().bbox
   let imageBounds = [[bounds[0][1], bounds[0][0]], [bounds[1][1], bounds[1][0]]]
-  overlay = L.imageOverlay(img_array[0].src, imageBounds, {"className":"anim", "opacity":0.7})
+  overlay = L.imageOverlay(img_array[0].src, imageBounds, {"opacity":0.6})
   overlay.addTo(map);
   status_msg(`End Adding Overlay to Map.`)
   shuffle()
  }
 
  times_offset++
- window.setTimeout(function() {render_times_images(times_offset)},0)
+ window.setTimeout(function() {render_times_images(times_offset)},50)
 }
 
 function remove_overlay() {
@@ -142,7 +138,7 @@ function shuffle() {
 function shuffle_next() {
  offset++
  if (continue_shuffle)
-  window.setTimeout(shuffle, 150)
+  window.setTimeout(shuffle, 200)
 }
 
 async function fetchFile() {
@@ -173,15 +169,18 @@ function startup() {
 }
 
 window.onload = startup;
-
  </script>
 </head>
 
 <body>
- <h2>CFRender POC - Example 1</h2>
+ <h2>CFRender - Example 1</h2>
  <p>100% Client side rendering of NetCDF CF data.</p>
  <p>Animated Grid Image Layer.  Animated over "time" dimension.</p>
- <p>Source NetCDF; <span style="font-size:smaller;">See <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> (Sea surface temperatures) at <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> under "CF Conventions".</span></p>
+ <p>Source NetCDF; <span style="font-size:smaller;">See 
+    <span style="text-decoration: underline">tos_O1_2001-2002.nc</span> 
+    (Sea Surface Temperatures) at 
+    <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> 
+    under "CF Conventions".</span></p>
  <p>Status: <span id="status"></span></p>
  <p>Time Dimension: <progress id="time_progress" min="0" max="100" value="0"></progress> 
  <span id="time"></span></p>

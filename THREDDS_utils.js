@@ -6,15 +6,16 @@
  * 
  * This script has no external dependencies and is browser ready
  * 
- * Author: Copyright (c) 2023 Harris Hudson  harris@harrishudson.com 
+ * Author: Copyright (c) 2024 Harris Hudson  harris@harrishudson.com 
  **/
 
-class TDSCatalogParser {
+export class TDSCatalogParser {
  constructor(src) {
   this.xmlCatalog = src
   this.catalog_subpath = '/thredds/catalog/'
   this.catalog_dataset_refs = this.getCatalogRefList()
   this.catalog_dataset_datasets = this.getCatalogDatasetList()
+  this.catalog_singular_dataset = this.getCatalogSingularDataset()
  }
 
  getCatalogRefList() {
@@ -70,6 +71,21 @@ class TDSCatalogParser {
    }
   }
   return ResultList
+ }
+
+ getCatalogSingularDataset() {
+  let Datasets = this.xmlCatalog.querySelectorAll('catalog > dataset')
+  if (!Datasets)
+   return null
+  if (Datasets.length != 1)
+   return null
+  let Dataset = Datasets[0]
+  let name = Dataset.getAttribute("name")
+  let ID = Dataset.getAttribute("ID")
+  let urlPath = Dataset.getAttribute("urlPath")
+  return {"name": name,
+          "ID": ID,
+          "urlPath": urlPath}
  }
 
  getCatalogRefHref(title, dataset_list_name) {
@@ -135,28 +151,66 @@ class TDSCatalogParser {
  }
 }
 
-class TDSMetadataParser {
- constructor(src) {
+export class TDSMetadataParser {
+ constructor(src, longitudeWrap) {
   this.xmlDataset = src
+  this.longitudeWrap = longitudeWrap
   this.LatLonBox = this.getLatLonBox()
-  this.LonStride = Math.abs(this.LatLonBox.west - this.LatLonBox.east)
-  // HorizStrideScaleFactor - An arbitrary constant.
-  // Minimum of 4 pixels per cell for 'getHorizStride'
+  // HorizStrideDefaultCellSize - An arbitrary constant.
+  // Minimum of number pixels per cell for 'getHorizStride'
   // Default setting; 4 is suitable for fullscreen maps
-  // Change (reduce) if required for non-fullscreen maps
-  this.HorizStrideScaleFactor = 4
+  // Change (reduce) if required for non-fullscreen maps.
+  // Reduce to produce higher image resolution.
+  // If using the CFRender draw2DbasicGrid to draw grids,
+  // then this generally this should match the 'idealCellSize' 
+  // parameter in most use cases which also defaults to 
+  // 'defaultIdealCellSize' value of 4.
+  this.HorizStrideDefaultCellSize = 4
+  // Minimum image dimension (x or y) in pixel dimensions
+  // to not scale to smaller sizes when considering 
+  // HorizontalStride
+  this.HorizStrideMinPixelScale = 150
   this.Axes = this.getAxes()
+  this.GridVariableList = this.getGridVariableList()
+ }
+
+ WorldWrap(lon, longitudeWrap) {
+  if (longitudeWrap || ((this.longitudeWrap !== undefined) && (this.longitudeWrap))) {
+   if (lon === null || lon === undefined || isNaN(lon)) 
+    return lon
+   lon = parseFloat(lon)
+   while (lon > 360) lon -= 360
+   while (lon < 0) lon += 360
+   return lon
+  } else 
+   return lon 
  }
 
  getLatLonBox() {
-  // TODO cater for Lon covering date meridian
   let LatLonBox = this.xmlDataset.querySelector('gridDataset > LatLonBox')
   let east = LatLonBox.querySelector('east')
   let west = LatLonBox.querySelector('west')
   let north = LatLonBox.querySelector('north')
   let south = LatLonBox.querySelector('south')
-  return {"east": east.textContent, "west": west.textContent, 
-         "north": north.textContent, "south": south.textContent}
+  if (this.longitudeWrap) {
+   let east_wrapped = this.WorldWrap(east.textContent, true)
+   let west_wrapped = this.WorldWrap(west.textContent, true)
+   // Special case longitudes spanning exactly entire globe
+   if ((east_wrapped == 180) && (west_wrapped == 180))
+    return {"east": 360,
+            "west": 0,
+            "north": north.textContent, 
+            "south": south.textContent}
+   else
+    return {"east": east_wrapped,
+            "west": west_wrapped,
+            "north": north.textContent, 
+            "south": south.textContent}
+  } else
+  return {"east": east.textContent,
+          "west": west.textContent, 
+          "north": north.textContent, 
+          "south": south.textContent}
  }
 
  getAxes() {
@@ -164,10 +218,10 @@ class TDSMetadataParser {
   let Axes = this.xmlDataset.querySelectorAll('gridDataset > axis')
   if (Axes) {
    for (let i=0; i<Axes.length; i++) {
-    var name = null, axisType = null, units = null, values = null, CoordRef = null, axisType = 'Unbound';
-    let axis = Axes[i];
-    name = axis.getAttribute('name');
-    axisType = axis.getAttribute('axisType');
+    var name = null, axisType = null, units = null, values = null, CoordRef = null, axisType = 'Unbound'
+    let axis = Axes[i]
+    name = axis.getAttribute('name')
+    axisType = axis.getAttribute('axisType')
     let unitsNode = axis.querySelector('attribute[name="units"]')
     if (unitsNode) 
      units = unitsNode.getAttribute('value')
@@ -202,32 +256,74 @@ class TDSMetadataParser {
   return null
  }
 
- getHorizStride(MapLon1, MapLon2, MapWidthInPixels) {
-  let GridLonCells = this.getAxisByType('Lon').values.length
-  let CellsPerDegree = parseFloat(GridLonCells / this.LonStride)
-  let MapLonStride = Math.abs(MapLon2 - MapLon1)
-  let DesiredCellCount = MapWidthInPixels / this.HorizStrideScaleFactor
-  let ViewPortCells = CellsPerDegree * MapLonStride
-  let HorizStride = parseInt(Math.max(0, ViewPortCells / DesiredCellCount ))
+ searchAxisTypes(axisTypes) {
+  for (let i=0; i<axisTypes.length; i++) {
+   let axis = this.getAxisByType(axisTypes[i])
+   if (axis)
+    return axis
+   }
+  return null
+ }
+
+ getHorizStride(image_size, image_bounds, ScaleFactor = this.HorizStrideDefaultCellSize, longitudeWrap) {
+  ScaleFactor = ScaleFactor || this.HorizStrideScaleFactor
+  ScaleFactor = Math.max(ScaleFactor, 1)
+  let imgAspectRatio = image_size.y / image_size.x
+  if ((image_size.x < this.HorizStrideMinPixelScale) ||
+      (image_size.y < this.HorizStrideMinPixelScale)) {
+   image_size.x = this.HorizStrideMinPixelScale
+   image_size.y = this.HorizStrideMinPixelScale * imgAspectRatio
+  }
+  let GridLonCells = 
+   this.searchAxisTypes(['Lon','GeoX','ProjectionX','Easting','X']).values.length
+  let GridLatCells = 
+   this.searchAxisTypes(['Lat','GeoY','ProjectionY','Northing','Y']).values.length
+  let TotalCellCount = GridLonCells * GridLatCells
+  let LatLonBox = this.getLatLonBox(longitudeWrap)
+  let LonStride = Math.abs(this.LatLonBox.west - this.LatLonBox.east)
+  let LatStride = Math.abs(this.LatLonBox.south - this.LatLonBox.north)
+  let imgLonStride = Math.abs(image_bounds[0][0] - image_bounds[1][0]) 
+  let imgLatStride = Math.abs(image_bounds[0][1] - image_bounds[1][1]) 
+  let relativeLonStride = Math.max(0, Math.min(1, imgLonStride / LonStride))
+  let relativeLatStride = Math.max(0, Math.min(1, imgLatStride / LatStride))
+  let relativeLonCells = relativeLonStride * GridLonCells
+  let relativeLatCells = relativeLatStride * GridLatCells
+  let cellCount = relativeLonCells * relativeLatCells
+  let DesiredCellCount = (image_size.x * image_size.y) / (ScaleFactor ** 2)
+  let imgCellCount = Math.sqrt(cellCount / DesiredCellCount)
+  let HorizStride = Math.round(Math.max(0, imgCellCount))
   return HorizStride
  }
 
  getGridVariableList() {
   let gridSets = this.xmlDataset.querySelectorAll('gridDataset > gridSet')
-  if (!gridSets)
+  if (!gridSets) 
    return null
-  var ResultList = []
+  let ResultList = []
   for (let gs = 0; gs < gridSets.length; gs++) {
-   let gridSet = gridSets[gs]
-   let grids = gridSet.querySelectorAll("grid")
-   if (!grids)
-    continue
-   for (let g = 0; g < grids.length; g++) {
-    let grid = grids[g]
-    let name = grid.getAttribute("name") 
-    let desc = grid.getAttribute("desc") 
-    ResultList.push({"name": name, "desc": desc})
-   }
+    let gridSet = gridSets[gs]
+    let grids = gridSet.querySelectorAll("grid")
+    if (!grids) continue
+    for (let g = 0; g < grids.length; g++) {
+      let grid = grids[g]
+      let gridAttributes = {}
+      for (let i = 0; i < grid.attributes.length; i++) {
+        let attr = grid.attributes[i]
+        gridAttributes[attr.name] = attr.value
+      }
+      let nestedAttributes = {}
+      let attributeElements = grid.querySelectorAll("attribute")
+      for (let a = 0; a < attributeElements.length; a++) {
+        let attrElem = attributeElements[a]
+        let name = attrElem.getAttribute("name")
+        let value = attrElem.getAttribute("value")
+        if (name && value) {
+          nestedAttributes[name] = value
+        }
+      }
+      gridAttributes["nestedAttributes"] = nestedAttributes
+      ResultList.push(gridAttributes)
+    }
   }
   return ResultList
  }
@@ -276,7 +372,9 @@ class TDSMetadataParser {
   }
   const start = this.parseAttributeValue(valuesNode, "start")
   const end = this.parseAttributeValue(valuesNode, "end")
-  const resolution = this.parseAttributeValue(valuesNode, "resolution")
+  var resolution = this.parseAttributeValue(valuesNode, "resolution")
+  if (!resolution)
+   resolution = 1
   const increment = this.parseAttributeValue(valuesNode, "increment")
   const npts = parseInt(valuesNode.getAttribute("npts"))
   if (!isNaN(start) && !isNaN(end) && !isNaN(resolution) && !isNaN(npts)) {
