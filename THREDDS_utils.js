@@ -2,11 +2,11 @@
  * THREDDS_utils.js 
  *
  * Universal helper functions to parse artefacts from THREDDS TDS servers
- * Eg, process "catalog.xml" and subset server "metadata.xml" XML responses from THREDDS TDS servers.
+ * Eg, process "catalog.xml" and subset service "metadata.xml" XML responses from THREDDS TDS servers.
  * 
  * This script has no external dependencies and is browser ready
  * 
- * Author: Copyright (c) 2024 Harris Hudson  harris@harrishudson.com 
+ * Author: Copyright (c) 2025 Harris Hudson  harris@harrishudson.com 
  **/
 
 export class TDSCatalogParser {

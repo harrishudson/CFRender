@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
    crossorigin=""/>
-  <script nonce="{$nonce}" src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
    crossorigin=""></script>
  <style>
 .mapdiv {
  border: 1px solid blue; 
- background-color: #EEEE;
+ background-color: #EEE;
  height: 440px; 
  width: 580px; 
  max-width: 90%
@@ -26,8 +26,6 @@ body {
  <script type="module">
 import { CFUtils, CFRender } from '../CFRender.js'
 import { surface_temperature_kelvin_stops } from './map_styles.js'
-
-// Some supporting functions to be passed to CFRender
 
 function SphericalProjection(coords) {
  let the_point = {lng: coords[0], lat: coords[1]}
@@ -42,7 +40,7 @@ function tos_fillStyle(cellData) {
 }
 
 var CF;  // CF is the main CFRender object;
-var map;
+var map
 
 function status_msg(msg) {
  document.getElementById('status').innerText = msg
@@ -89,7 +87,7 @@ async function process_netcdf(arrayBuf) {
  let bounds = CF.getXYbbox().bbox
  let imageBounds = [[bounds[0][1], bounds[0][0]], [bounds[1][1], bounds[1][0]]]
  let overlay = L.svgOverlay(svgElem, imageBounds, {"interactive": true})
- overlay.addTo(map);
+ overlay.addTo(map)
  
  status_msg(`End Adding Overlay to Map.`)
 }
@@ -103,16 +101,16 @@ async function fetchFile() {
 }
 
 function startup() {
- map = L.map('map').setView([0, 170], 1);
+ map = L.map('map').setView([0, 170], 1)
  map.attributionControl.setPrefix(false)
  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
- }).addTo(map);
+ }).addTo(map)
  
- fetchFile();
+ fetchFile()
 }
 
-window.onload = startup;
+window.onload = startup
  </script>
 </head>
 
@@ -126,7 +124,7 @@ window.onload = startup;
   (Sea Surface Temperatures) at 
   <a href="https://www.unidata.ucar.edu/software/netcdf/examples/files.html">Unidata NetCDF Examples</a> 
   under "CF Conventions".</span></p>
- <p>Status: <span id="status">Ready</span></p>
+ <p>Status: <span id="status" style="color: blue;">Ready</span></p>
  <p><div id="map" class="mapdiv"></div></p>
 </body>
 </html>

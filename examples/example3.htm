@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <title>CFRender - Example 3</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+   integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+   crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+   crossorigin=""></script>
+ <style>
+.mapdiv {
+ border: 1px solid blue; 
+ background-color: #EEE;
+ height: 440px; 
+ width: 580px; 
+ max-width: 90%
+}
+body { 
+ font-family: Arial;
+}
+ </style>
+
+ <script type="module">
+import { CFUtils, CFRender } from '../CFRender.js'
+import { wind_magnitude_cell_stops, wind_magnitude_arrow_stops } from './map_styles.js'
+
+function SphericalProjection(coords) {
+ let the_point = {lng: coords[0], lat: coords[1]}
+ let the_proj = L.Projection.SphericalMercator.project(the_point)
+ return [the_proj.x, the_proj.y]
+}
+
+let cfu = new CFUtils()
+
+function mouse_click(evt) {
+ if (!CFR)
+  return;
+ let theTime = CFR.netCDF.getDataVariable('time')
+ let theElev = CFR.netCDF.getDataVariable('zlev')
+ let mag = CFR.getCellValue('windspeed', {time: theTime[0], zlev: theElev[0]}, evt.latlng.lng, evt.latlng.lat)
+ document.getElementById('cell_status').innerText = `Magnitude: ${mag}` 
+}
+
+function show_arrow_data(e) {
+ let arrow_data = e.srcElement.dataset
+ document.getElementById('arrow_status').innerText =
+  `Avg Mag: ${arrow_data['value_magnitude']}, Avg Direction: ${arrow_data['value_direction']}`
+}
+
+function omitArrow(data) {
+ if (data['magnitude'] < 3)
+  return true
+ return false 
+}
+
+function opacityArrow(data) {
+ return Math.max(0,Math.min(1,(0.4+(data['magnitude']/25))))
+}
+
+function scaleArrow(data) {
+ const minMag = 0.5
+ const maxMag = 25;  
+ return Math.min(0.7,Math.max(0,(data['magnitude'] - minMag)/(maxMag - minMag)))
+}
+
+function animateArrow(data) {
+ const baseDuration = 5
+ const minDuration = 0.8
+ const scaleFactor = 4
+ return Math.max(minDuration, baseDuration - data['magnitude'] / scaleFactor)
+}
+
+function fillArrow(data) {
+ return cfu.steppedHexColor(data['magnitude'], wind_magnitude_arrow_stops)
+}
+
+function windspeed_render(cellData) {
+ return cfu.steppedHexColor(cellData.value, wind_magnitude_cell_stops)
+}
+
+function omitCell(cellData) {
+ if (cellData.value <= 0.5)
+  return true;
+ return false;
+}
+
+// Main script
+
+var CFR;  // CFR is the main CFRender object
+var map;
+var gARROW_OVERLAY
+var gCELL_OVERLAY
+
+function status_msg(msg) {
+ document.getElementById('status').innerText = msg
+}
+
+function process_netcdf(barray) {
+ status_msg('Begin Initial processing of NetCDF CF file')
+ CFR = new CFRender(barray, null, null, true)
+ console.log(CFR)
+ status_msg('End Initial processing of NetCDF CF file')
+ render_images()
+}
+
+async function render_images() {
+ let LatLonBox = CFR.getXYbbox().bbox
+ let bounds = LatLonBox
+ let east = LatLonBox[1][0]
+ let west = LatLonBox[0][0]
+ let north = LatLonBox[1][1]
+ let south = LatLonBox[0][1]
+ let sw_pixel = map.latLngToContainerPoint([south, west])
+ let ne_pixel = map.latLngToContainerPoint([north, east])
+ let imgWidth = Math.abs(sw_pixel.x - ne_pixel.x)
+ let imgHeight = Math.abs(sw_pixel.y - ne_pixel.y)
+ let imageBounds = [[ south, west ], [ north, east ]]
+ let img1 = await CFR.draw2DbasicGrid('windspeed', 
+                                      {},
+                                      SphericalProjection, 
+                                      'url',
+                                      {"fill": windspeed_render,
+                                       "opacity": 0.35,
+                                       "stroke": "none",
+                                       "strokeWidth": 0 ,
+                                       "omit": omitCell
+                                      })
+
+ if (gCELL_OVERLAY) 
+  map.removeLayer(gCELL_OVERLAY)
+
+ if (!gCELL_OVERLAY) {
+  gCELL_OVERLAY = L.imageOverlay(img1, imageBounds) 
+  gCELL_OVERLAY.addTo(map)
+ }
+
+ let img = CFR.draw2DbasicVector('u_wind',
+                                 'v_wind',
+                                 0,
+                                 {},
+                                 imgWidth,
+                                 imgHeight,
+                                 SphericalProjection, 
+                                 'svg',
+                                 {omit: omitArrow,
+                                  fill: fillArrow,
+                                  opacity: opacityArrow,
+                                  animationDuration: animateArrow,
+                                  symbol: 'vane',
+                                  symbolSize: scaleArrow,
+                                  idealArrowSize: 20,
+                                  animateDuration: animateArrow,
+                                  "eventListeners": [
+                                   ['mouseover', show_arrow_data, null],
+                                   ['click', show_arrow_data, null],
+                                  ]
+                                })
+
+ if (gARROW_OVERLAY) 
+  map.removeLayer(gARROW_OVERLAY)
+
+ if (!gARROW_OVERLAY) {
+  gARROW_OVERLAY = L.svgOverlay(img, imageBounds, {interactive: true}) 
+  gARROW_OVERLAY.addTo(map)
+ }
+
+}
+
+async function fetchFile() {
+ status_msg('Fetching NetCDF file.')    
+ const response = await fetch('uvcompNCEIBlendedGlobalNRTDailyWW00_NBSv02_wind_daily_20250327_nrt.nc')
+ status_msg('Begin process input file')
+ const x = await response.arrayBuffer()
+ process_netcdf(x)
+}
+
+function map_startup() {
+ map = L.map('map').setView([0, 170], 1);
+ map.attributionControl.setPrefix(false)
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+ }).addTo(map);
+
+ map.on('click',mouse_click)
+
+ fetchFile()
+}
+
+window.onload = map_startup
+ </script>
+</head>
+
+<body>
+ <h2>CFRender - Example 3</h2>
+ <p>100% Client side rendering of NetCDF CF data. </p>
+ <p>Wind Grid and Vector Layer. Rendering of single time slice. 
+   <b>Hover</b> Arrows to show Arrow data, <b>click</b> map to show cell data.
+ </p>
+ <p>Source NetCDF; 
+  <span style="font-size:smaller;">See 
+  <span style="text-decoration: underline">
+   uvcompNCEIBlendedGlobalNRTDailyWW00_NBSv02_wind_daily_20250327_nrt.nc
+  </span> 
+  (NOAA/NCEI Blended daily averaged 0.25-degree Sea Surface Wind Version 2.0)
+  at 
+  <a href="https://coastwatch.noaa.gov/thredds/catalog/uvcompNCEIBlendedGlobalNRTDailyWW00/catalog.html">
+  https://coastwatch.noaa.gov/thredds/catalog/uvcompNCEIBlendedGlobalNRTDailyWW00/catalog.html
+  </a>
+  </span></p>
+ <p>Map Status: <span id="status" style="color: blue;">Loading</span></p>
+ <p>Cell Status: <span id="cell_status" style="color: green;"></span></p>
+ <p>Arrow Status: <span id="arrow_status" style="color: green;"></span></p>
+ <p><div id="map" class="mapdiv"></div></p>
+</body>
+</html>

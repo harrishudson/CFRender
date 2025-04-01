@@ -1,4 +1,4 @@
-/* Copyright (c) Harris Hudson 2024 */
+/* Copyright (c) Harris Hudson 2025 */
 
 export const surface_temperature_kelvin_stops = [
   { value: 223.15, color: "#7300a6", opacity: 1}, // Deep purple, extreme cold
@@ -36,4 +36,23 @@ export const surface_temperature_celsius_stops = [
   { value: 40,  color: "#ff4000", opacity: 1 }, // Red-orange, extreme heat
   { value: 45,  color: "#ff0000", opacity: 1 }, // Red, extreme heat
   { value: 50,  color: "#b30000", opacity: 1 }  // Deep red, searing heat
+ ]
+
+export const wind_magnitude_cell_stops = [
+  { value: 0, color: "#ffffff" },
+  { value: 1, color: "#cce6ff" },
+  { value: 5, color: "#66b3ff" },
+  { value: 10, color: "#0066cc" },
+  { value: 15, color: "#ffcc00" },
+  { value: 20, color: "#ff6600" },
+  { value: 25, color: "#cc0000" }
+ ]
+
+export const wind_magnitude_arrow_stops = [
+  { value: 0, color: "#cccccc" },  // Gray (calm)
+  { value: 2, color: "#00e6e6" },  // Cyan (light wind)
+  { value: 6, color: "#ffdd00" },  // Yellow (moderate wind)
+  { value: 11, color: "#ff6600" }, // Orange (strong wind)
+  { value: 16, color: "#cc00ff" }, // Purple (very strong)
+  { value: 21, color: "#ffffff" }  // White (extreme wind)
  ]

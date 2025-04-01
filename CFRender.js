@@ -1,7 +1,7 @@
 /**
  * CFRender
  * CFUtils
- * Basic 2D Grid Renderer for NetCDF (v3.0)
+ * Basic 2D Grid and Vector Renderers for NetCDF (v3.0)
  * For NetCDF files in CF (Climate Forecasting) convention format
  *
  * Includes (modified) embedded dependent libraries;
@@ -15,11 +15,7 @@
  * CFRender 
  * CFUtils
  *
- * Author: Copyright (c) 2024 Harris Hudson  harris@harrishudson.com 
- *
- * Future work;
- *
- * - Wind direction Arrows Renderer (consideration in progress)
+ * Author: Copyright (c) 2025 Harris Hudson  harris@harrishudson.com 
  *
  **/
 
@@ -1312,30 +1308,30 @@ var _CFUtils = {
   if (value <= orderedColorStops[minKey].value) 
    return orderedColorStops[minKey].color;
   if (value >= orderedColorStops[maxKey].value) 
-   return orderedColorStops[maxKey].color;
+   return orderedColorStops[maxKey].color
 
   let startIndex = 0;
   while (value > orderedColorStops[startIndex].value) {
-    startIndex++;
+    startIndex++
   }
 
   const startColorStop = orderedColorStops[startIndex - 1]
   const endColorStop = orderedColorStops[startIndex]
-  const percentage = (value - startColorStop.value) / (endColorStop.value - startColorStop.value);
+  const percentage = (value - startColorStop.value) / (endColorStop.value - startColorStop.value)
 
-  const startRGB = this.hexToRgb(startColorStop.color);
-  const endRGB = this.hexToRgb(endColorStop.color);
-  const interpolatedColor = this.interpolateColor(startRGB, endRGB, percentage);
-  const hexColor = this.rgbToHex(interpolatedColor);
+  const startRGB = this.hexToRgb(startColorStop.color)
+  const endRGB = this.hexToRgb(endColorStop.color)
+  const interpolatedColor = this.interpolateColor(startRGB, endRGB, percentage)
+  const hexColor = this.rgbToHex(interpolatedColor)
 
-  return hexColor;
+  return hexColor
  },
 
  interpolateColor: function(startColor, endColor, percentage) {
-  const r = parseInt(startColor[0] + (endColor[0] - startColor[0]) * percentage);
-  const g = parseInt(startColor[1] + (endColor[1] - startColor[1]) * percentage);
-  const b = parseInt(startColor[2] + (endColor[2] - startColor[2]) * percentage);
-  return [ r, g, b ];
+  const r = parseInt(startColor[0] + (endColor[0] - startColor[0]) * percentage)
+  const g = parseInt(startColor[1] + (endColor[1] - startColor[1]) * percentage)
+  const b = parseInt(startColor[2] + (endColor[2] - startColor[2]) * percentage)
+  return [ r, g, b ]
  },
 
  linearHexColor: function(value, minValue, maxValue, minHexColor, maxHexColor) {
@@ -1388,7 +1384,7 @@ var _CFUtils = {
   let orderedColorStops = opacityStops.sort((a, b) => a.value - b.value);
 
   let minKey = 0;
-  let maxKey = orderedColorStops.length - 1;
+  let maxKey = orderedColorStops.length - 1
 
   // Return the min or max opacity if the value is out of range
   if (value <= orderedColorStops[minKey].value)
@@ -1397,19 +1393,19 @@ var _CFUtils = {
     return orderedColorStops[maxKey].opacity;
 
   // Find the correct color stop range for interpolation
-  let startIndex = 0;
+  let startIndex = 0
   while (value > orderedColorStops[startIndex].value) {
-    startIndex++;
+    startIndex++
   }
 
-  const startOpacityStop = orderedColorStops[startIndex - 1];
-  const endOpacityStop = orderedColorStops[startIndex];
-  const percentage = (value - startOpacityStop.value) / (endOpacityStop.value - startOpacityStop.value);
+  const startOpacityStop = orderedColorStops[startIndex - 1]
+  const endOpacityStop = orderedColorStops[startIndex]
+  const percentage = (value - startOpacityStop.value) / (endOpacityStop.value - startOpacityStop.value)
 
   // Interpolate the opacity
-  const interpolatedOpacity = startOpacityStop.opacity + (endOpacityStop.opacity - startOpacityStop.opacity) * percentage;
+  const interpolatedOpacity = startOpacityStop.opacity + (endOpacityStop.opacity - startOpacityStop.opacity) * percentage
 
-  return interpolatedOpacity;
+  return interpolatedOpacity
  },
 
  linearOpacity: function(value, minValue, maxValue, minOpacity = 0, maxOpacity = 1) {
@@ -1428,7 +1424,7 @@ var _CFUtils = {
    // Extract the numeric value and units from the time string
    const [clock_units, , baseDateStr] = units.split(" ")
    // Convert the value to a floating-point number
-   const numericValue = parseFloat(value);
+   const numericValue = parseFloat(value)
    // Convert the numeric value to milliseconds based on the units
    let milliseconds;
    let lower_clock_units = clock_units.toLowerCase() 
@@ -1492,20 +1488,20 @@ export class CFRender {
     try {
      let axis = this.searchVariablesforAxis('X')
      if (axis) {
-      this.Axes['X'] = axis.axis;
+      this.Axes['X'] = axis.axis
       if (axis.ordinate)
-       this.varOrdinate['X'] = axis.ordinate;
+       this.varOrdinate['X'] = axis.ordinate
      }
     } catch(e) { 
-     console.error(e); 
+     console.error(e)
      console.error('Cannot determine X axis')
     }
     try {
      let axis = this.searchVariablesforAxis('Y')
      if (axis) {
-      this.Axes['Y'] = axis.axis;
+      this.Axes['Y'] = axis.axis
       if (axis.ordinate)
-       this.varOrdinate['Y'] = axis.ordinate;
+       this.varOrdinate['Y'] = axis.ordinate
      }
     } catch(e) { 
      console.error(e)
@@ -1522,7 +1518,7 @@ export class CFRender {
     this.XYbbox = {}
     this.XYBounds = {} 
     this.data2DGrid = []
-    this.data2DArrows = [] //Wind Arrows visualisations for future work
+    this.data2DVectors = [] //Wind Arrows visualisations for future work
     // If X/Y variables are provided as separate vars to dimension grid variables, 
     // then assume the dataset is already projected in some other projection 
     // (not unprojected lat/longs), and lat/longs are provided separately for CF conformance.
@@ -1541,7 +1537,8 @@ export class CFRender {
    if (longitudeWrap)
     this.longitudeWrap = true
    this.defaultIdealCellSize = 4 
-   this.debug = false 
+   this.defaultIdealArrowSize = 24 
+   this.debug = false
   }
 
   Log(msg) {
@@ -1572,6 +1569,10 @@ export class CFRender {
    this.data2DGrid = grid
   }
 
+  getdata2DVectors() {
+   return this.data2DVectors
+  }
+
   getIsProjectedSource() {
    return this.is_projected_source
   }
@@ -1594,37 +1595,37 @@ export class CFRender {
    var CoordAxis = Axis;
    switch(Axis) {
     case 'X':
-     CoordAxis = 'Lon';
+     CoordAxis = 'Lon'
      break;
     case 'Y':
-     CoordAxis = 'Lat';
+     CoordAxis = 'Lat'
      break;
     case 'T':
-     CoordAxis = 'Time';
+     CoordAxis = 'Time'
      break;
    }
    // Standard_Name - only used for final search of 'standard_name'
    // As last ditch attempt to determine axis
-   var StandardNameAxis = Axis;
+   var StandardNameAxis = Axis
    switch(Axis) {
     case 'X':
-     StandardNameAxis = 'longitude';
+     StandardNameAxis = 'longitude'
      break;
     case 'Y':
-     StandardNameAxis = 'latitude';
+     StandardNameAxis = 'latitude'
      break;
     case 'T':
-     StandardNameAxis = 'time';
+     StandardNameAxis = 'time'
      break;
    }
    // Projected axis names
-   var ProjectedNameAxis = Axis;
+   var ProjectedNameAxis = Axis
    switch(Axis) {
     case 'X':
-     ProjectedNameAxis = 'projection_x_coordinate';
+     ProjectedNameAxis = 'projection_x_coordinate'
      break;
     case 'Y':
-     ProjectedNameAxis = 'projection_y_coordinate';
+     ProjectedNameAxis = 'projection_y_coordinate'
      break;
    }
    for (let var_idx = 0; var_idx < this.netCDF.headers.variables.length; var_idx++) {
@@ -1700,7 +1701,7 @@ export class CFRender {
 
   getCleansedDataVariable(DataVariable) {
    let varIdx = this.varIndex[DataVariable]
-   var FillValue = null, ScaleFactor = null, AddOffset = null;
+   var FillValue = null, ScaleFactor = null, AddOffset = null
    // Check for FillValue
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
@@ -1732,7 +1733,7 @@ export class CFRender {
    if (theValue == null)
     return null;
    let varIdx = this.varIndex[DataVariable]
-   var FillValue = null, ScaleFactor = null, AddOffset = null;
+   var FillValue = null, ScaleFactor = null, AddOffset = null
    // Check for FillValue
    for (let attr_idx = 0; attr_idx < this.netCDF.headers.variables[varIdx].attributes.length; attr_idx++) {
     let this_attr = this.netCDF.headers.variables[varIdx].attributes[attr_idx]
@@ -2045,25 +2046,34 @@ export class CFRender {
      }
     }:function(coords) { return coords; }
    // Determine result array offset to use
-   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
-   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
-   let gridSize = xSize * ySize;
-   var startingOffset = gridSize;
-   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  // Assumes data is non-interlaced and X,Y are final dimensions
+   let xSize = this.netCDF.getDataVariable(p.xDimName).length
+   let ySize = this.netCDF.getDataVariable(p.yDimName).length
+   let gridSize = xSize * ySize
+   var startingOffset = gridSize
+   var is_offset = false
+
+   for (let idx = 0; idx < p.varDimensions.length;  idx++) { 
     let otherDimIdx = p.varDimensions[idx]
     let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p.xDimName)
+     continue
+    if (otherVarName == p.yDimName)
+     continue
     let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
-    startingOffset *= otherVarIndex
+    if (otherVarIndex > 0) {
+     startingOffset *= otherVarIndex
+     is_offset = true
+    }
    }
-   if (p.varDimensions.length == 2)
+
+   if (!is_offset)
     startingOffset = 0
+
    // Fetch data
    let the_data =  this.getCleansedDataVariable(DataVariable)
    let the_result = {}
-   var result_transpose = false;
    var data_offset = startingOffset
-   var is_projected_source = false
-   var xData = this.netCDF.getDataVariable(p.xDimName)
+   let xData = this.netCDF.getDataVariable(p.xDimName).map((lon) => { return this.WorldWrap(lon, this.longitudeWrap); })
    var yData = this.netCDF.getDataVariable(p.yDimName)
    if (p.varDimensions[p.varDimensions.length - 1] == p.yDimIndex) {
     // Will Read X,Y
@@ -2091,7 +2101,6 @@ export class CFRender {
      }
     }
    } else {
-    result_transpose = true;
     // Will Read Y,X
     this.Log('Reading cartesian grid data as Y,X')
     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
@@ -2134,7 +2143,7 @@ export class CFRender {
       return localProjectionCache.get(key)
      } else {
       let projectedCoords = XYprojectionFunction(coords)
-      localProjectionCache.set(key, projectedCoords);
+      localProjectionCache.set(key, projectedCoords)
       return projectedCoords
      }
     }:function(coords) { return coords; }
@@ -2154,24 +2163,33 @@ export class CFRender {
    const xOrdinateData = this.netCDF.getDataVariable(xOrdinate).map((x) => { return this.WorldWrap(x, this.longitudeWrap) })
    const yOrdinateData = this.netCDF.getDataVariable(yOrdinate)
    // Determine result array offset to use
-   let xSize = this.netCDF.getDataVariable(p.xDimName).length;
-   let ySize = this.netCDF.getDataVariable(p.yDimName).length;
-   let gridSize = xSize * ySize;
-   var startingOffset = gridSize;
-   for (var idx = p.varDimensions.length - 3; idx >= 0; idx--) {  // Assumes data is non-interlaced and X,Y are final dimensions
+   let xSize = this.netCDF.getDataVariable(p.xDimName).length
+   let ySize = this.netCDF.getDataVariable(p.yDimName).length
+   let gridSize = xSize * ySize
+   var startingOffset = gridSize
+   var is_offset = false
+
+   for (let idx = 0; idx < p.varDimensions.length;  idx++) { 
     let otherDimIdx = p.varDimensions[idx]
     let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p.xDimName)
+     continue
+    if (otherVarName == p.yDimName)
+     continue
     let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
-    startingOffset *= otherVarIndex
+    if (otherVarIndex > 0) {
+     startingOffset *= otherVarIndex
+     is_offset = true
+    }
    }
-   if (p.varDimensions.length == 2)
+
+   if (!is_offset)
     startingOffset = 0
+
    // Fetch data
    let the_data =  this.getCleansedDataVariable(DataVariable)
    let the_result = {}
-   var result_transpose = false;
    var data_offset = startingOffset
-   var is_projected_source = false
    var xData, yData;
    var xData = this.netCDF.getDataVariable(p.xDimName)
    var yData = this.netCDF.getDataVariable(p.yDimName)
@@ -2212,7 +2230,6 @@ export class CFRender {
      }
     }
    } else {
-    result_transpose = true;
     // Will Read Y,X
     this.Log('Reading projected grid data as Y,X')
     for (let y_idx = 0; y_idx < yData.length; y_idx++) {
@@ -2393,6 +2410,371 @@ export class CFRender {
   return []
   }
 
+  make2DVectorGrid(DataVariable1, 
+                   DataVariable2, 
+                   dataVariableMode,
+                   DimensionFilter,
+                   xGridSize,
+                   yGridSize,
+                   XYprojectionFunction,
+                   rotationOffset = 180,
+                   nonOrthogonalProjection) {
+
+   if (this.is_projected_source)
+    return this.make2DVectorGridProjected(DataVariable1, 
+                                          DataVariable2, 
+                                          dataVariableMode,
+                                          DimensionFilter,
+                                          xGridSize,
+                                          yGridSize,
+                                          XYprojectionFunction,
+                                          rotationOffset, 
+                                          nonOrthogonalProjection)
+   else
+    return this.make2DVectorGridCartesian(DataVariable1, 
+                                          DataVariable2, 
+                                          dataVariableMode,
+                                          DimensionFilter,
+                                          xGridSize,
+                                          yGridSize,
+                                          XYprojectionFunction,
+                                          rotationOffset,
+                                          nonOrthogonalProjection)
+  }
+
+  make2DVectorGridCartesian(DataVariable1, 
+                            DataVariable2, 
+                            dataVariableMode,
+                            DimensionFilter,
+                            xGridSize,
+                            yGridSize,
+                            XYprojectionFunction,
+                            rotationOffset,
+                            nonOrthogonalProjection) {
+
+   // Assumptions - DataVariable2 will use the same x,y data values as DataVariable1
+
+   const p1 = this.preprocessDataValidation(DataVariable1, DimensionFilter)
+   const p2 = this.preprocessDataValidation(DataVariable2, DimensionFilter)
+   const localProjectionCache = this.projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     let key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      localProjectionCache.set(key, projectedCoords);
+      return projectedCoords
+     }
+    }:function(coords) { return coords; }
+   
+   // Determine result array offset to use
+   let xSize = this.netCDF.getDataVariable(p1.xDimName).length
+   let ySize = this.netCDF.getDataVariable(p1.yDimName).length
+   let gridSize = xSize * ySize
+   var startingOffset1 = gridSize
+   var startingOffset2 = gridSize
+   var is_offset1 = false
+   var is_offset2 = false
+
+   for (let idx = 0; idx < p1.varDimensions.length;  idx++) { 
+    let otherDimIdx = p1.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p1.xDimName)
+     continue
+    if (otherVarName == p1.yDimName)
+     continue
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    if (otherVarIndex > 0) {
+     startingOffset1 *= otherVarIndex
+     is_offset1 = true
+    }
+   }
+
+   for (let idx = 0; idx < p2.varDimensions.length;  idx++) { 
+    let otherDimIdx = p2.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p2.xDimName)
+     continue
+    if (otherVarName == p2.yDimName)
+     continue
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    if (otherVarIndex > 0) {
+     startingOffset2 *= otherVarIndex
+     is_offset2 = true
+    }
+   }
+
+   if (!is_offset1)
+    startingOffset1 = 0
+   if (!is_offset2)
+    startingOffset2 = 0
+
+   var xRange, yRange, minPoint, maxPoint
+   if ((this.extentCache) &&
+       (this.extentCache.length == 2) &&
+       (this.extentCache[0].length == 2) &&
+       (this.extentCache[1].length == 2)) {
+    // extentCache hit
+    this.Log('Extent Cache hit.')
+   } else {
+    this.Log('Extent Cache miss.')
+    let e = this.findExtent(XYprojectionFunction, this.projectionCache)
+    this.extentCache = e['extent']
+    this.projectionCache = e['projectionCache']
+   }
+   minPoint = this.extentCache[0]
+   maxPoint = this.extentCache[1]
+   xRange = maxPoint[0] - minPoint[0]
+   yRange = maxPoint[1] - minPoint[1]
+
+   this.Log(`x y gridsize; ${xGridSize},${yGridSize}`)
+   let VectorGrid = this.makeEmptyVectorGrid(xGridSize, yGridSize)
+
+   // Fetch data
+   let the_data1 =  this.getCleansedDataVariable(DataVariable1)
+   let the_data2 =  this.getCleansedDataVariable(DataVariable2)
+   var data_offset1 = startingOffset1
+   var data_offset2 = startingOffset2
+   let xData1 = this.netCDF.getDataVariable(p1.xDimName).map((lon) => { return this.WorldWrap(lon, this.longitudeWrap); })
+   var yData1 = this.netCDF.getDataVariable(p1.yDimName)
+   if (p1.varDimensions[p1.varDimensions.length - 1] == p1.yDimIndex) {  // Assume same for p2
+    // Will Read X,Y
+    this.Log('Reading cartesian grid data as X,Y')
+    for (let x_idx = 0; x_idx < xData1.length; x_idx++) {
+     for (let y_idx = 0; y_idx < yData1.length; y_idx++) {
+      let lon = xData1[x_idx]
+      let lat = yData1[y_idx]
+      let value1 = the_data1[data_offset1]
+      let value2 = the_data2[data_offset2]
+      let md = this.getDataMD(value1, value2, dataVariableMode)
+      // Check for projected vector angle
+      let p_coords = projFunc([lon, lat])
+      let uv = this.getDataUV(value1, value2, dataVariableMode)
+      var renderAngle = null
+      if (nonOrthogonalProjection) {
+       let vect = makeVectorMD(uv.u, uv.v)
+       let angle = (vect.direction + rotationOffset) % 360
+       renderAngle = getProjectedAngle(projFunc, lon, lat, angle)
+      } else
+       renderAngle = (md.direction + rotationOffset) % 360
+      
+      // Specialised translate
+      let tp = this.translateOrdinates(p_coords, minPoint[0], maxPoint[1])
+      let x_offset = Math.round((tp[0] / xRange) * xGridSize)
+      let y_offset = Math.round((tp[1] / yRange) * yGridSize)
+      let row =  { px: tp[0],
+                   py: tp[1],
+                   u: uv.u,
+                   v: uv.v,
+                   renderAngle 
+                 }
+      
+      try {
+       VectorGrid[x_offset][y_offset].push(row)
+      } catch(e) {}
+      data_offset1++
+      data_offset2++
+     }
+    }
+   } else {
+    // Will Read X,Y
+    this.Log('Reading cartesian grid data as X,Y')
+    for (let y_idx = 0; y_idx < yData1.length; y_idx++) {
+     for (let x_idx = 0; x_idx < xData1.length; x_idx++) {
+      let lon = xData1[x_idx]
+      let lat = yData1[y_idx]
+      let value1 = the_data1[data_offset1]
+      let value2 = the_data2[data_offset2]
+      let md = this.getDataMD(value1, value2, dataVariableMode)
+      let p_coords = projFunc([lon, lat])
+      // Check for projected vector angle
+      let uv = this.getDataUV(value1, value2, dataVariableMode)
+      var renderAngle = null
+      if (nonOrthogonalProjection) {
+       let vect = this.makeVectorMD(uv.u, uv.v)
+       let angle = (vect.direction + rotationOffset) % 360
+       renderAngle = this.getProjectedAngle(projFunc, lon, lat, angle)
+      } else
+       renderAngle = (md.direction + rotationOffset) % 360
+      
+      let tp = this.translateOrdinates(p_coords, minPoint[0], maxPoint[1])
+      let x_offset = Math.round((tp[0] / xRange) * xGridSize)
+      let y_offset = Math.round((tp[1] / yRange) * yGridSize)
+      let row =  { px: tp[0],
+                   py: tp[1],
+                   u: uv.u,
+                   v: uv.v,
+                   renderAngle
+                 }
+      try {
+       VectorGrid[x_offset][y_offset].push(row)
+      } catch(e) {}
+      data_offset1++
+      data_offset2++
+     }
+    }
+   }
+   return { "grid": VectorGrid, 
+            "preProcess": [ p1, p2 ],
+            "xSize": xGridSize,
+            "ySize": yGridSize,
+            "DimensionFilter": DimensionFilter,
+            "XYprojectionFunction": XYprojectionFunction }
+  }
+
+  make2DVectorGridProjected(DataVariable1, 
+                            DataVariable2, 
+                            dataVariableMode,
+                            DimensionFilter,
+                            xGridSize,
+                            yGridSize,
+                            XYprojectionFunction,
+                            rotationOffset,
+                            nonOrthogonalProjection) {
+
+   // Assumptions - DataVariable2 will use the same x,y data values as DataVariable1
+
+   const p1 = this.preprocessDataValidation(DataVariable1, DimensionFilter)
+   const p2 = this.preprocessDataValidation(DataVariable2, DimensionFilter)
+   const localProjectionCache = this.projectionCache
+   const projFunc = (typeof XYprojectionFunction == 'function')?
+    function(coords) { 
+     let key = `${coords[0]},${coords[1]}`
+     if (localProjectionCache.has(key))  {
+      return localProjectionCache.get(key)
+     } else {
+      let projectedCoords = XYprojectionFunction(coords)
+      localProjectionCache.set(key, projectedCoords)
+      return projectedCoords
+     }
+    }:function(coords) { return coords; }
+   
+   const xAxisSize = this.netCDF.headers.dimensions[p1.xDimIndex].size
+   const xOrdinate = this.varOrdinate['X']
+   const xOrdVarIdx = this.varIndex[xOrdinate]
+   const xOrdVarDim = this.netCDF.headers.variables[xOrdVarIdx].dimensions
+   const yAxisSize = this.netCDF.headers.dimensions[p1.yDimIndex].size
+   const yOrdinate = this.varOrdinate['Y']
+   const yOrdVarIdx = this.varIndex[yOrdinate]
+   const xOrdinateData = this.netCDF.getDataVariable(xOrdinate).map((x) => { return this.WorldWrap(x, this.longitudeWrap) })
+   const yOrdinateData = this.netCDF.getDataVariable(yOrdinate)
+   
+   // Determine result array offset to use
+   let xSize = this.netCDF.getDataVariable(p1.xDimName).length
+   let ySize = this.netCDF.getDataVariable(p1.yDimName).length
+
+   let gridSize = xSize * ySize
+   var startingOffset1 = gridSize
+   var startingOffset2 = gridSize
+   var is_offset1 = false
+   var is_offset2 = false
+
+   for (let idx = 0; idx < p1.varDimensions.length;  idx++) { 
+    let otherDimIdx = p1.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p1.xDimName)
+     continue
+    if (otherVarName == p1.yDimName)
+     continue
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    if (otherVarIndex > 0) {
+     startingOffset1 *= otherVarIndex
+     is_offset1 = true
+    }
+   }
+
+   for (let idx = 0; idx < p2.varDimensions.length;  idx++) { 
+    let otherDimIdx = p2.varDimensions[idx]
+    let otherVarName = this.netCDF.headers.dimensions[otherDimIdx].name
+    if (otherVarName == p2.xDimName)
+     continue
+    if (otherVarName == p2.yDimName)
+     continue
+    let otherVarIndex = this.netCDF.getDataVariable(otherVarName).indexOf(DimensionFilter[otherVarName])
+    if (otherVarIndex > 0) {
+     startingOffset2 *= otherVarIndex
+     is_offset2 = true
+    }
+   }
+
+   if (!is_offset1)
+    startingOffset1 = 0
+   if (!is_offset2)
+    startingOffset2 = 0
+
+   var xRange, yRange, minPoint, maxPoint
+   if ((this.extentCache) &&
+       (this.extentCache.length == 2) &&
+       (this.extentCache[0].length == 2) &&
+       (this.extentCache[1].length == 2)) {
+    // extentCache hit
+    this.Log('Extent Cache hit.')
+   } else {
+    this.Log('Extent Cache miss.')
+    let e = this.findExtent(XYprojectionFunction, this.projectionCache)
+    this.extentCache = e['extent']
+    this.projectionCache = e['projectionCache']
+   }
+   minPoint = this.extentCache[0]
+   maxPoint = this.extentCache[1]
+   xRange = maxPoint[0] - minPoint[0]
+   yRange = maxPoint[1] - minPoint[1]
+
+   this.Log(`x y gridsize: ${xGridSize},${yGridSize}`)
+   let VectorGrid = this.makeEmptyVectorGrid(xGridSize, yGridSize)
+
+   // Fetch data
+   let the_data1 =  this.getCleansedDataVariable(DataVariable1)
+   let the_data2 =  this.getCleansedDataVariable(DataVariable2)
+   var data_offset1 = startingOffset1
+   var data_offset2 = startingOffset2
+
+   let points_length = xOrdinateData.length
+   for (let i = 0; i < points_length; i++) {
+    let lon = xOrdinateData[i]
+    let lat = yOrdinateData[i]
+    let value1 = the_data1[data_offset1]
+    let value2 = the_data2[data_offset2]
+    let md = this.getDataMD(value1, value2, dataVariableMode)
+    // Check for projected vector angle
+    let p_coords = projFunc([lon, lat])
+    let uv = this.getDataUV(value1, value2, dataVariableMode)
+    var renderAngle = null
+    if (nonOrthogonalProjection) {
+     let vect = makeVectorMD(uv.u, uv.v)
+     let angle = (vect.direction + rotationOffset) % 360
+     renderAngle = getProjectedAngle(projFunc, lon, lat, angle)
+    } else
+     renderAngle = (md.direction + rotationOffset) % 360
+       
+    // Specialised translate
+    let tp = this.translateOrdinates(p_coords, minPoint[0], maxPoint[1])
+    let x_offset = Math.round((tp[0] / xRange) * xGridSize)
+    let y_offset = Math.round((tp[1] / yRange) * yGridSize)
+    let row =  { px: tp[0],
+                 py: tp[1],
+                 u: uv.u,
+                 v: uv.v,
+                 renderAngle 
+               }
+       
+     try {
+      VectorGrid[x_offset][y_offset].push(row)
+     } catch(e) {}
+     data_offset1++
+     data_offset2++
+    }
+
+   return { "grid": VectorGrid, 
+            "preProcess": [ p1, p2 ],
+            "xSize": xGridSize,
+            "ySize": yGridSize,
+            "DimensionFilter": DimensionFilter,
+            "XYprojectionFunction": XYprojectionFunction }
+  }
+
   translateOrdinates(coords, minX, maxY) {
    let xt = coords[0] - minX
    let yt = maxY - coords[1]
@@ -2412,7 +2794,7 @@ export class CFRender {
      p += 'L'
     else
      p = 'M'
-    p += polygon[i][0].toString()+','+polygon[i][1].toString()
+     p += `${polygon[i][0]},${polygon[i][1]}`
    }
    if (p)
     p += 'z'
@@ -2422,18 +2804,18 @@ export class CFRender {
   findCentroid(points) {
    if (points.length === 0) 
     throw new Error("No points provided")
-   let xSum = 0;
-   let ySum = 0;
-   const numPoints = points.length;
+   let xSum = 0
+   let ySum = 0
+   const numPoints = points.length
    for (let i = 0; i < numPoints; i++) {
-    const [x, y] = points[i];
+    const [x, y] = points[i]
     if (isNaN(x) || isNaN(y)) 
      throw new Error(`Invalid point detected: [${x}, ${y}]`)
-    xSum += x;
-    ySum += y;
+    xSum += x
+    ySum += y
    }
-   const centroid = [xSum / numPoints, ySum / numPoints];
-   return centroid;
+   const centroid = [ xSum / numPoints, ySum / numPoints ]
+   return centroid
   }
 
   pointInPolygon(points, p) {
@@ -2463,9 +2845,243 @@ export class CFRender {
    return null
   }
 
+  makeWindIcon(cellSize, symbol, symbolSize, 
+               theColor, theOpacity, theRotation, 
+               animateDuration, angularRotation, disableOpacityEasing,
+               cellData, dimensionFilter) {
+
+   cellSize = cellSize || 24
+   symbol = symbol || "arrow"
+   theColor = theColor || "#000000"
+   theRotation = theRotation || 0
+   angularRotation = angularRotation || 0
+   var d = null
+   var useStroke = false, useFill = false
+   const relativeScale = (cellSize / 24) * symbolSize
+   const relativeTranslate = (cellSize / 2) * symbolSize
+
+   switch (symbol.toLowerCase()) {
+     case 'vane': {
+      d = "M 0 24 L 12 0 L 24 24 L 18 24 A 8 8 0 0 0 6 24 L 0 24 z" 
+      useFill = true
+      break
+     }
+     case 'chevron': {
+      d = "M 0 18 L 12 6 L 24 18" 
+      useStroke = true
+      break
+     }
+     default: {
+      //Arrow is default
+      d = "M 12 0 L 24 11 L 15 10 L 15 24 L 9 24 L 9 11 L 0 11 L 12 0z"
+      useFill = true
+     }
+    }
+
+   let p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+   p.setAttribute('vector-effect', 'non-scaling-stroke')
+   p.setAttribute('shape-rendering', 'crispEdges')
+   p.setAttribute('d', d)
+   if (useFill) {
+    p.setAttribute('fill', theColor)
+    p.setAttribute('stroke', 'none')
+   }
+   if (useStroke) {
+    p.setAttribute('stroke', theColor)
+    p.setAttribute('stroke-width', '4')
+    p.setAttribute('fill', 'none')
+   }
+   p.setAttribute('opacity', theOpacity)
+
+   for (let v in cellData) {
+    if ((cellData[v]) && (typeof cellData[v] != 'function'))
+     p.setAttribute(`data-value_${v.replace(/\s/g,'')}`, cellData[v])
+   }
+
+   for (let dim in dimensionFilter) {
+    if ((dimensionFilter[dim]) && (typeof dimensionFilter[dim] != 'function'))
+     p.setAttribute(`data-dimension_${dim.replace(/\s/g,'')}`, dimensionFilter[dim])
+   }
+  
+   let anim_g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+   anim_g.appendChild(p)
+  
+   if (animateDuration > 0) {
+    let animTransform = document.createElementNS('http://www.w3.org/2000/svg', 'animateTransform')
+    animTransform.setAttribute('animateType','xml')
+    animTransform.setAttribute('attributeName','transform')
+    animTransform.setAttribute('type','translate')
+    animTransform.setAttribute('from', '0, 12');
+    animTransform.setAttribute('to', '0, -12');
+    animTransform.setAttribute('dur', `${animateDuration}s`)
+    animTransform.setAttribute('repeatCount', 'indefinite')
+    anim_g.appendChild(animTransform)
+
+    if ((!disableOpacityEasing) && (theOpacity > 0.2)) {
+     let anim1 = document.createElementNS('http://www.w3.org/2000/svg', 'animate')
+     anim1.setAttribute('attributeName','opacity')
+     anim1.setAttribute('values', `0.2;${theOpacity};0.2`)
+     anim1.setAttribute('dur', `${animateDuration}s`)
+     anim1.setAttribute('repeatCount', 'indefinite')
+     anim_g.appendChild(anim1)
+    }
+   }
+
+   let icon_g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+   icon_g.setAttribute('transform', 'translate(-12 -12)')
+   icon_g.appendChild(anim_g)
+
+   let orient_g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+   let orient_transform = `scale(${relativeScale}) rotate(${theRotation})`
+  
+   orient_g.setAttribute('transform', orient_transform)
+  
+   if ((animateDuration > 0) && (angularRotation > 0)) {
+    let angular_g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    let forwardRotation = angularRotation / 2
+    let forward = (forwardRotation).toString()
+    let backward = (-forwardRotation).toString()
+    let animTransform2 = document.createElementNS('http://www.w3.org/2000/svg', 'animateTransform')
+    animTransform2.setAttribute('animateType','xml')
+    animTransform2.setAttribute('attributeName','transform')
+    animTransform2.setAttribute('type','rotate')
+    animTransform2.setAttribute('from', backward)
+    animTransform2.setAttribute('to', forward)
+    animTransform2.setAttribute('dur', `${animateDuration}s`)
+    animTransform2.setAttribute('repeatCount', 'indefinite')
+    angular_g.appendChild(animTransform2)
+    angular_g.appendChild(icon_g)
+    orient_g.appendChild(angular_g)
+   } else {
+    orient_g.appendChild(icon_g)
+   }
+  
+   return orient_g
+  }
+
+  makeVectorUV(magnitude, direction) {
+   const thetaRad = (direction * Math.PI) / 180
+   const u = -magnitude * Math.sin(thetaRad)
+   const v = -magnitude * Math.cos(thetaRad)
+   return { u, v }
+  }
+
+  makeVectorMD(u, v) {
+   const magnitude = Math.sqrt((u ** 2) + (v ** 2))
+   let direction = Math.atan2(-u, -v) * (180 / Math.PI)
+   if (direction < 0) direction += 360
+   return { magnitude, direction }
+  }
+
+  getDataUV(value1, value2, theMode) {
+   if (theMode == 1)
+    return this.makeVectorUV(value1, value2)
+   // Default is u/v
+   return { u: value1, v: value2 }
+  }
+
+  getDataMD(value1, value2, theMode) {
+   // Default is u/v
+   if (theMode != 1)
+    return this.makeVectorMD(value1, value2)
+   return { magnitude: value1, direction: value2 }
+  }
+
+  getProjectedAngle(projFunc, lon, lat, angle) {
+   const delta = 0.0001; // Small step for angle approximation
+   const radAngle = angle * (Math.PI / 180)
+   const lonOffset = delta * Math.cos(radAngle) / Math.cos(lat * (Math.PI / 180))
+   const latOffset = delta * Math.sin(radAngle)
+   const [x, y] = projFunc([lon, lat])
+   const [x2, y2] = projFunc([lon + lonOffset, lat + latOffset])
+   const ptheta = Math.atan2(x2 - x, y - y2) * (180 / Math.PI); // Flipped y-axis
+   return ptheta
+  }
+
+  makeEmptyVectorGrid(xSize, ySize) {
+   var x = 0, y = 0
+   var result = []
+   while (x <= xSize) {
+    result[x] = []
+    while (y <= ySize) {
+     result[x][y] = []
+     y++ 
+    }
+    y = 0
+    x++
+   }
+   return result
+  }
+
+  computeAverageVector(points) {
+   let sumU = 0, sumV = 0, count = 0
+   let sumRenderAngle = 0, RenderCount = 0
+
+   for (let { u, v, renderAngle } of points) {
+    if ((u) && (v)) {
+     sumU += u
+     sumV += v
+     count++
+    }
+    if (renderAngle) {
+     sumRenderAngle += renderAngle
+     RenderCount++
+    }
+   }
+
+   if (!count)
+    return null
+
+   let avgU = sumU / count
+   let avgV = sumV / count
+   var avgRenderAngle = null
+   if (RenderCount) 
+    avgRenderAngle = sumRenderAngle / RenderCount
+
+   let magnitude = Math.sqrt(avgU ** 2 + avgV ** 2)
+   let angle = Math.atan2(avgV, avgU) * (180 / Math.PI)
+
+   return { magnitude, angle, points, pointsCount: count, direction: { x: avgU, y: avgV, avgRenderAngle } }
+  }
+
+  computeAverageAngularChange(points) {
+   let avgVector = this.computeAverageVector(points)
+   if (!avgVector)
+    return null
+   let { direction, angle } = avgVector
+   let { x: avgU, y: avgV, a: avgRenderAngle } = direction
+
+   let norm = Math.sqrt(avgU ** 2 + avgV ** 2)
+   let dirX = avgU / norm
+   let dirY = avgV / norm
+
+   let projected = points.map(p => ({
+     ...p,
+     proj: p.px * dirX + p.py * dirY, // Projection along avg flow
+     angle: Math.atan2(p.v, p.u) * (180 / Math.PI) // Angle of each vector
+    })).sort((a, b) => a.proj - b.proj)
+
+   let totalChange = 0
+   let count = 0
+
+   for (let i = 1; i < projected.length; i++) {
+    let deltaAngle = projected[i].angle - projected[i - 1].angle
+
+    if (deltaAngle > 180) deltaAngle -= 360
+    if (deltaAngle < -180) deltaAngle += 360
+
+    totalChange += deltaAngle
+    count++
+   }
+
+   let avgRotationChange = count > 0 ? totalChange / count : 0
+   return avgRotationChange
+  }
+
   generateCaches(XYprojectionFunction) {
    let extent = this.findExtent(XYprojectionFunction, null) 
-   return {"extentCache": extent['extent'], "projectionCache": extent['projectionCache']}
+   return { extentCache: extent['extent'], 
+            projectionCache: extent['projectionCache'] }
   }
 
   findExtent(XYprojectionFunction, projectionCache) {
@@ -2641,12 +3257,13 @@ export class CFRender {
    `;
    if (ImageType == 'svg') {
     // SVG
-    var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svgElement.setAttribute('xmlns', "http://www.w3.org/2000/svg");
+    var svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    svgElement.setAttribute('xmlns', "http://www.w3.org/2000/svg")
     svgElement.setAttribute('width', '100%')
     svgElement.setAttribute('height', '100%')
-    svgElement.setAttribute('viewBox', "0 0 "+xRange.toString()+" "+yRange.toString());
+    svgElement.setAttribute('viewBox', `0 0 ${xRange} ${yRange}`)
     svgElement.setAttribute('preserveAspectRatio', 'none')
+    svgElement.setAttribute('overflow', 'visible')
    } else {
     // Canvas
     // See; https://developer.mozilla.org/en-US/docs/Web/HTML/Element/canvas#maximum_canvas_size
@@ -2661,7 +3278,7 @@ export class CFRender {
     const maxCellSize = parseInt(BROWSER_MAX_CANVAS_WIDTH / Math.max(xSize, ySize))
     const cell_pixel_size = parseInt(Math.max(1, Math.min(idealCellSize, maxCellSize)))
     var pixel_width = Math.max(xSize, ySize) * cell_pixel_size;  //Good enough approximation
-    var pixel_height = pixel_width * BoundsAspectRatio;
+    var pixel_height = pixel_width * BoundsAspectRatio
     var canvasElement
     if (ImageType == 'url') 
      canvasElement = new OffscreenCanvas(pixel_width, pixel_height)
@@ -2786,8 +3403,8 @@ export class CFRender {
        // Styling
        cell.setAttribute("fill", fill)
        cell.setAttribute("stroke", stroke)
-       cell.setAttribute("stroke-width", strokeWidth.toString()+'px')
-       cell.setAttribute("opacity", opacity.toString())
+       cell.setAttribute("stroke-width", `${strokeWidth}px`)
+       cell.setAttribute("opacity", `${opacity}`)
        cell.setAttribute("vector-effect", "non-scaling-stroke")
        cell.setAttribute('shape-rendering', "crispEdges")
        //Set cell data value and dimensions 
@@ -2972,5 +3589,237 @@ export class CFRender {
     }
    }
   }
-}
 
+  draw2DbasicVector(DataVariable1,
+                    DataVariable2,
+                    dataVariableMode = 0,
+                    DimensionFilter = {},
+                    imageWidth,
+                    imageHeight,
+                    XYprojectionFunction,
+                    ImageType,
+                    ImageStyle) {
+
+   dataVariableMode = dataVariableMode || 0
+   DimensionFilter = DimensionFilter || {}
+   const bounds = this.getXYbbox().bbox
+
+   if (isNaN(imageWidth))
+    throw 'imageWidth parameter missing or not numeric.'
+   if (imageWidth <= 0)
+    throw 'imageWidth parameter must be a positive numeric pixel value.'
+   if (isNaN(imageHeight))
+    throw 'imageHeight parameter missing or not numeric.'
+   if (imageHeight <= 0)
+    throw 'imageHeight parameter must be a positive numeric pixel value.'
+
+   var disableAngularRotation = false
+   if (ImageStyle) {
+    if ('disableAngularRotation' in ImageStyle)
+     disableAngularRotation = ImageStyle['disableAngularRotation'] 
+    }
+ 
+   var disableOpacityEasing = false
+   if (ImageStyle) {
+    if ('disableOpacityEasing' in ImageStyle)
+     disableOpacityEasing = ImageStyle['disableOpacityEasing'] 
+    }
+
+   var idealArrowSize = this.defaultIdealArrowSize
+   if (ImageStyle) {
+    if ('idealArrowSize' in ImageStyle) {
+     if (typeof ImageStyle['idealArrowSize'] === 'number')
+      idealArrowSize = ImageStyle['idealArrowSize']
+        }
+    }
+
+   var rotationOffset = 180
+   if (ImageStyle) {
+    if ('rotationOffset' in ImageStyle) {
+     if (typeof ImageStyle['rotationOffset'] === 'number')
+      rotationOffset = ImageStyle['rotationOffset']
+     }
+    }
+
+   var omitThreshold = null
+   if (ImageStyle) {
+    if ('omitThreshold' in ImageStyle) {
+     if (typeof ImageStyle['omitThreshold'] === 'number')
+      omitThreshold = ImageStyle['omitThreshold']
+     }
+    }
+   if ((omitThreshold) && (omitThreshold < 0))
+    omitThreshold = null
+
+   var theSymbol = 'arrow'
+   if (ImageStyle) {
+    if ('symbol' in ImageStyle) {
+     if (typeof ImageStyle['symbol'] === 'string')
+      theSymbol = ImageStyle['symbol']
+     }
+    }
+
+   var nonOrthogonalProjection = false
+   if (ImageStyle) {
+    if ('nonOrthogonalProjection' in ImageStyle)
+     nonOrthogonalProjection = ImageStyle['nonOrthogonalProjection'] 
+    }
+
+   const xGridSize = Math.ceil(imageWidth / idealArrowSize)
+   const yGridSize = Math.ceil(imageHeight / idealArrowSize)
+
+   this.data2DVectors = this.make2DVectorGrid(
+                         DataVariable1, 
+                         DataVariable2, 
+                         dataVariableMode,
+                         DimensionFilter,
+                         xGridSize,
+                         yGridSize,
+                         XYprojectionFunction,
+                         rotationOffset,
+                         nonOrthogonalProjection)
+
+   let outputDataGrid = []
+   let theGrid = this.data2DVectors.grid
+   for (let x=0; x<theGrid.length; x++) {
+    outputDataGrid[x] = {}
+    for (let y=0; y<theGrid[x].length; y++) {
+     let points_array = theGrid[x][y].filter(
+      function(r) { if ((r.u) && (r.v)) return true; else return false })
+     outputDataGrid[x][y] = { 
+      avgVector: this.computeAverageVector(points_array), 
+      angularChange: (disableAngularRotation) ? null : this.computeAverageAngularChange(points_array) 
+     }
+    }
+   }
+
+   let svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+   svgElement.setAttribute('xmlns', "http://www.w3.org/2000/svg");
+   svgElement.setAttribute('width', '100%')
+   svgElement.setAttribute('height', '100%')
+   svgElement.setAttribute('viewBox', `0 0 ${imageWidth} ${imageHeight}`)
+   svgElement.setAttribute('preserveAspectRatio', 'none')
+   svgElement.setAttribute('overflow', 'visible')
+
+   const halfArrowSize = idealArrowSize / 2
+   var arrowcount = 0
+   for (let x=0; x<outputDataGrid.length; x++) {
+    for (let y=0; y<outputDataGrid.length; y++) {
+     if (!outputDataGrid[x])
+      continue
+     if (!outputDataGrid[x][y])
+      continue
+     if (!outputDataGrid[x][y]['avgVector'])
+      continue
+     let avgVector = outputDataGrid[x][y]['avgVector']
+     let angularChange = outputDataGrid[x][y]['angularChange']
+     let cellData = { "magnitude": avgVector['magnitude'],
+                      "pointsCount": avgVector['pointsCount'],
+                      "direction": avgVector['angle'],
+                      "angle": avgVector['angle'],
+                      "renderAngle": avgVector['direction']['renderAngle'],
+                      "angularChange": angularChange,
+                      "u": avgVector['direction']['x'],
+                      "v": avgVector['direction']['y']
+      } 
+     var cellEvents = []
+     var theDelay = 0
+     var theScale = 0.8 
+     var theFill = 'black'
+     var theOpacity = 1
+     var omit = false
+
+     let x_translate = x*idealArrowSize - halfArrowSize
+     let y_translate = y*idealArrowSize - halfArrowSize
+     let icon_transform = `translate(${x_translate} ${y_translate})`
+     let iconContainer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+     iconContainer.setAttribute('transform', icon_transform)
+
+     if ((omitThreshold) && (cellData['magnitude'] < omitThreshold))
+      continue
+
+     if (ImageStyle) {
+
+      if ('omit' in ImageStyle) {
+       if (typeof ImageStyle['omit'] === 'function')
+        omit = ImageStyle['omit'](cellData)
+       else if ((typeof ImageStyle['omit'] === 'boolean') ||
+                (typeof ImageStyle['omit'] === 'string') ||
+                (typeof ImageStyle['omit'] === 'number'))
+        omit = ImageStyle['omit']
+      }
+
+      if (omit) continue
+
+      if ('animateDuration' in ImageStyle) {
+       if (typeof ImageStyle['animateDuration'] === 'function')
+        theDelay = ImageStyle['animateDuration'](cellData)
+       else if (typeof ImageStyle['animateDuration'] === 'number')
+        theDelay = ImageStyle['animateDuration']
+      }
+
+      if ('symbolSize' in ImageStyle) {
+       if (typeof ImageStyle['symbolSize'] === 'function')
+        theScale = ImageStyle['symbolSize'](cellData)
+       else if (typeof ImageStyle['symbolSize'] === 'number')
+        theScale = ImageStyle['symbolSize']
+      }
+
+      if ('fill' in ImageStyle) {
+       if (typeof ImageStyle['fill'] === 'function')
+        theFill = ImageStyle['fill'](cellData)
+       else if (typeof ImageStyle['fill'] === 'string')
+        theFill = ImageStyle['fill']
+      }
+
+      if ('opacity' in ImageStyle) {
+       if (typeof ImageStyle['opacity'] === 'function')
+        theOpacity = ImageStyle['opacity'](cellData)
+       else if (typeof ImageStyle['opacity'] === 'number')
+        theOpacity = ImageStyle['opacity']
+      }
+
+      if ('eventListeners' in ImageStyle) {
+       try {
+       for (let ev = 0; ev < ImageStyle['eventListeners'].length; ev++) {
+        let this_event = ImageStyle['eventListeners'][ev]
+        if ((typeof this_event[0] === 'string') && (typeof this_event[1] === 'function')) 
+         cellEvents.push(this_event)
+       }
+          } catch(e) { this.Log(e) }
+      }
+
+     }
+
+     var theAngle = null
+     if (avgVector['renderAngle'] != null)
+      theAngle = avgVector['renderAngle']
+     else
+      theAngle = avgVector['angle']
+
+     iconContainer.appendChild(
+      this.makeWindIcon(idealArrowSize,
+                        theSymbol,
+                        theScale,
+                        theFill,
+                        theOpacity,
+                        theAngle,
+                        theDelay,
+                        angularChange,
+                        disableOpacityEasing,
+                        cellData,
+                        DimensionFilter))
+
+     for (let ev = 0; ev < cellEvents.length; ev++)
+      iconContainer.addEventListener(cellEvents[ev][0], cellEvents[ev][1], cellEvents[ev][2])
+
+     svgElement.appendChild(iconContainer)
+     
+     arrowcount++
+    }
+   }
+
+   this.Log(`Arrows Rendered; ${arrowcount}`)
+   return svgElement
+  }
+}
