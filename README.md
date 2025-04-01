@@ -1,4 +1,4 @@
-# CFRender - A NetCDF CF Grid Rendering Toolkit. 
+# CFRender - A NetCDF CF Grid and Vector Rendering Toolkit. 
 A toolkit to enable browser based processing of NetCDF (v3.0) files in CF (Climate Forecasting) convention with both a 2D Grid renderer and a 2D Vector renderer.  Can be used to generate imagery stand-alone or with 2D mapping tools.  Designed with no external dependencies and intended to be run in the browser.
 
 ![Screenshot](https://harrishudson.com/github/CFRender_snapshot1.png)
